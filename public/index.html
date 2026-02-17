@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>HEIST // Co-Op Terminal Heist</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0a0a; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; height: 100vh; font-family: 'Courier New', monospace;
+  color: #33ff33; overflow: hidden; user-select: none;
+}
+canvas { display: block; image-rendering: pixelated; }
+#ui { display: flex; width: 1200px; height: 80px; margin-top: 4px; gap: 4px; }
+.panel { flex: 1; background: #111; border: 1px solid #222; padding: 8px; font-size: 12px; line-height: 1.6; }
+.panel.thief { border-color: #1a3a1a; color: #33ff33; }
+.panel.center { text-align: center; border-color: #333; color: #aaa; }
+.panel.drone { border-color: #1a1a3a; color: #33aaff; }
+.bar-bg { display: inline-block; width: 80px; height: 10px; background: #222; vertical-align: middle; }
+.bar-fill { height: 100%; transition: width 0.2s; }
+
+/* Chat bar */
+#chatArea {
+  width: 1200px; height: 100px; display: flex; flex-direction: column;
+  margin-top: 4px; background: #0d0d0d; border: 1px solid #1a1a1a;
+}
+#chatLog {
+  flex: 1; overflow-y: auto; padding: 4px 8px; font-size: 11px; color: #666;
+  scrollbar-width: thin; scrollbar-color: #333 #111;
+}
+#chatLog .thief-msg { color: #33ff33; }
+#chatLog .drone-msg { color: #33aaff; }
+#chatLog .sys-msg { color: #666; font-style: italic; }
+#chatInput {
+  display: flex; border-top: 1px solid #1a1a1a;
+}
+#chatInput input {
+  flex: 1; background: #111; border: none; color: #33ff33; padding: 6px 8px;
+  font-family: 'Courier New', monospace; font-size: 12px; outline: none;
+}
+#chatInput input::placeholder { color: #333; }
+#chatInput button {
+  background: #1a1a1a; border: none; color: #33ff33; padding: 6px 12px;
+  font-family: 'Courier New', monospace; font-size: 12px; cursor: pointer;
+}
+#chatInput button:hover { background: #222; }
+
+/* Overlay screens */
+.overlay {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 10;
+}
+#lobbyScreen { background: #0a0a0a; }
+#waitScreen { background: rgba(10,10,10,0.95); display: none; }
+#pauseScreen { background: rgba(10,10,10,0.85); display: none; }
+#gameOverScreen { background: rgba(10,0,0,0.9); display: none; }
+#winScreen { background: rgba(0,10,0,0.9); display: none; }
+#completeScreen { background: rgba(0,10,0,0.95); display: none; }
+
+.overlay h1 { font-size: 48px; text-shadow: 0 0 20px currentColor; margin-bottom: 10px; }
+.overlay h2 { font-size: 28px; margin-bottom: 15px; }
+.overlay p { font-size: 14px; margin-bottom: 8px; }
+.overlay .sub { color: #1a8a1a; font-size: 16px; margin-bottom: 30px; }
+
+.btn {
+  font-family: 'Courier New', monospace; font-size: 18px; padding: 12px 32px;
+  background: none; cursor: pointer; margin: 8px; display: inline-block;
+}
+.btn-green { border: 2px solid #33ff33; color: #33ff33; }
+.btn-green:hover { background: #1a3a1a; }
+.btn-blue { border: 2px solid #33aaff; color: #33aaff; }
+.btn-blue:hover { background: #1a1a3a; }
+.btn-red { border: 2px solid #ff3333; color: #ff3333; }
+.btn-red:hover { background: #3a1a1a; }
+
+.room-code {
+  font-size: 64px; color: #33ff33; letter-spacing: 12px;
+  text-shadow: 0 0 30px #33ff33; margin: 20px 0;
+}
+input.code-input {
+  font-family: 'Courier New', monospace; font-size: 40px; width: 200px;
+  text-align: center; letter-spacing: 10px; text-transform: uppercase;
+  background: #111; border: 2px solid #33aaff; color: #33aaff; padding: 10px;
+  outline: none;
+}
+input.code-input:focus { border-color: #66ccff; }
+.error-msg { color: #ff3333; font-size: 14px; min-height: 20px; margin: 8px 0; }
+
+.controls-row { display: flex; gap: 60px; margin: 20px 0; }
+.ctrl-col { text-align: center; }
+.ctrl-col h3 { margin-bottom: 8px; font-size: 16px; }
+.ctrl-col.t { color: #33ff33; }
+.ctrl-col.d { color: #33aaff; }
+.ctrl-col p { color: #666; font-size: 12px; line-height: 1.8; }
+
+.role-badge {
+  display: inline-block; padding: 4px 16px; font-size: 14px; margin: 10px 0;
+  border: 1px solid; letter-spacing: 2px;
+}
+.role-badge.thief { border-color: #33ff33; color: #33ff33; }
+.role-badge.drone { border-color: #33aaff; color: #33aaff; }
+</style>
+</head>
+<body>
+
+<!-- LOBBY SCREEN -->
+<div class="overlay" id="lobbyScreen">
+  <h1 style="color:#33ff33">// HEIST //</h1>
+  <p class="sub">Online Co-Op Terminal Heist</p>
+  <div class="controls-row">
+    <div class="ctrl-col t">
+      <h3>THIEF (Host)</h3>
+      <p>WASD — Move<br>E (hold) — Pick Lock<br>Collect loot, reach exit</p>
+    </div>
+    <div class="ctrl-col d">
+      <h3>DRONE (Guest)</h3>
+      <p>Arrow Keys — Move Cursor<br>Space — Hack Target<br>Disable cameras, open doors</p>
+    </div>
+  </div>
+  <div>
+    <button class="btn btn-green" id="btnHost">[ HOST GAME ]</button>
+    <button class="btn btn-blue" id="btnJoinShow">[ JOIN GAME ]</button>
+  </div>
+  <div id="joinArea" style="display:none; margin-top: 20px; text-align: center;">
+    <p style="color:#33aaff; margin-bottom:10px;">Enter room code:</p>
+    <input class="code-input" id="codeInput" maxlength="4" placeholder="----">
+    <br>
+    <button class="btn btn-blue" id="btnJoin" style="margin-top:12px;">[ CONNECT ]</button>
+    <div class="error-msg" id="joinError"></div>
+  </div>
+</div>
+
+<!-- WAITING FOR PARTNER -->
+<div class="overlay" id="waitScreen">
+  <h2 style="color:#33ff33">Room Created</h2>
+  <p style="color:#888">Share this code with your partner:</p>
+  <div class="room-code" id="roomCodeDisplay">----</div>
+  <p style="color:#555">Waiting for DRONE operator to connect...</p>
+  <div style="margin-top:20px;">
+    <div class="role-badge thief">YOU ARE THE THIEF</div>
+  </div>
+</div>
+
+<!-- PAUSE (disconnected partner) -->
+<div class="overlay" id="pauseScreen">
+  <h2 style="color:#ffaa00">// PAUSED //</h2>
+  <p id="pauseMsg" style="color:#aa8800">Waiting for partner to reconnect...</p>
+</div>
+
+<!-- GAME OVER -->
+<div class="overlay" id="gameOverScreen">
+  <h1 style="color:#ff3333">// BUSTED //</h1>
+  <p id="goReason" style="color:#aa3333">The thief was caught!</p>
+  <p id="goScore" style="color:#aa3333">Score: 0</p>
+  <div id="goRetry"></div>
+</div>
+
+<!-- LEVEL WIN -->
+<div class="overlay" id="winScreen">
+  <h1 style="color:#33ff33">// LEVEL COMPLETE //</h1>
+  <p id="winLevel" style="color:#1a8a1a"></p>
+  <p id="winScore" style="color:#1a8a1a"></p>
+  <p id="winBonus" style="color:#ffcc00"></p>
+  <div id="winNext"></div>
+</div>
+
+<!-- GAME COMPLETE -->
+<div class="overlay" id="completeScreen">
+  <h1 style="color:#33ff33">// HEIST COMPLETE //</h1>
+  <p style="color:#1a8a1a; font-size: 18px;">All 3 levels cleared!</p>
+  <p id="finalScore" style="color:#33ff33; font-size: 24px; margin: 20px 0;"></p>
+  <button class="btn btn-green" onclick="location.reload()">[ RETURN TO LOBBY ]</button>
+</div>
+
+<canvas id="game" style="display:none;"></canvas>
+<div id="ui" style="display:none;">
+  <div class="panel thief" id="thiefPanel"></div>
+  <div class="panel center" id="centerPanel"></div>
+  <div class="panel drone" id="dronePanel"></div>
+</div>
+<div id="chatArea" style="display:none;">
+  <div id="chatLog"></div>
+  <div id="chatInput">
+    <input type="text" id="chatText" placeholder="Type to chat... (Enter to send)" maxlength="200">
+    <button id="chatSend">SEND</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// AUDIO
+// ============================================================
+const SFX = (() => {
+  let ctx = null;
+  function getCtx() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    return ctx;
+  }
+  function play(freq, dur, type = 'square', vol = 0.1) {
+    try {
+      const c = getCtx();
+      const o = c.createOscillator();
+      const g = c.createGain();
+      o.type = type; o.frequency.value = freq;
+      g.gain.value = vol;
+      g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur);
+      o.connect(g); g.connect(c.destination);
+      o.start(); o.stop(c.currentTime + dur);
+    } catch(e) {}
+  }
+  return {
+    move: () => play(120, 0.08, 'square', 0.06),
+    hack: () => play(800, 0.15, 'sine', 0.08),
+    alarm: () => { play(400, 0.2, 'sawtooth', 0.12); setTimeout(() => play(600, 0.2, 'sawtooth', 0.12), 200); },
+    hit: () => play(80, 0.3, 'sawtooth', 0.15),
+    loot: () => { play(600, 0.1, 'sine', 0.1); setTimeout(() => play(900, 0.15, 'sine', 0.1), 100); },
+    lock: () => play(200, 0.1, 'triangle', 0.05),
+    doorOpen: () => play(500, 0.2, 'sine', 0.08),
+    victory: () => { [523,659,784,1047].forEach((f,i) => setTimeout(() => play(f, 0.3, 'sine', 0.1), i*150)); },
+    gameOver: () => { [400,300,200,100].forEach((f,i) => setTimeout(() => play(f, 0.4, 'sawtooth', 0.1), i*200)); },
+    charge: () => play(1200, 0.05, 'sine', 0.04),
+  };
+})();
+
+// ============================================================
+// NETWORKING
+// ============================================================
+let ws = null;
+let myRole = null;
+let myRoomCode = null;
+let myPlayerId = null;
+let latestState = null;
+let gameVisible = false;
+let inputThrottle = {};
+
+function wsUrl() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${location.host}`;
+}
+
+function connect(onOpen) {
+  ws = new WebSocket(wsUrl());
+  ws.onopen = () => { if (onOpen) onOpen(); };
+  ws.onmessage = (e) => handleMessage(JSON.parse(e.data));
+  ws.onclose = () => {
+    // Try to reconnect after 2 seconds
+    setTimeout(() => {
+      if (myRoomCode && myRole) {
+        connect(() => {
+          ws.send(JSON.stringify({ type: 'reconnect', code: myRoomCode, role: myRole }));
+        });
+      }
+    }, 2000);
+  };
+}
+
+function send(obj) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+}
+
+function handleMessage(msg) {
+  switch(msg.type) {
+    case 'hosted':
+      myRoomCode = msg.code;
+      myRole = msg.role;
+      myPlayerId = msg.playerId;
+      showScreen('waitScreen');
+      document.getElementById('roomCodeDisplay').textContent = msg.code;
+      break;
+
+    case 'joined':
+    case 'reconnected':
+      myRoomCode = msg.code;
+      myRole = msg.role;
+      myPlayerId = msg.playerId;
+      showGame();
+      addChatSystem(`Connected as ${msg.role.toUpperCase()}`);
+      break;
+
+    case 'partnerJoined':
+      showGame();
+      addChatSystem('DRONE operator connected — HEIST IS ON');
+      break;
+
+    case 'partnerDisconnected':
+      showScreen('pauseScreen');
+      document.getElementById('pauseMsg').textContent =
+        `${msg.disconnectedRole.toUpperCase()} disconnected — waiting for reconnect...`;
+      break;
+
+    case 'partnerReconnected':
+      hideAllOverlays();
+      addChatSystem('Partner reconnected');
+      break;
+
+    case 'error':
+      document.getElementById('joinError').textContent = msg.message;
+      break;
+
+    case 'state':
+      latestState = msg;
+      // Play sounds
+      if (msg.sounds) {
+        for (const s of msg.sounds) {
+          if (SFX[s]) SFX[s]();
+        }
+      }
+      // Check game over / win
+      if (msg.gameOver) {
+        showScreen('gameOverScreen');
+        document.getElementById('goScore').textContent = `Score: ${msg.score}`;
+        const retryDiv = document.getElementById('goRetry');
+        if (myRole === 'thief') {
+          retryDiv.innerHTML = '<button class="btn btn-red" onclick="sendRetry()">[ RETRY ]</button>';
+        } else {
+          retryDiv.innerHTML = '<p style="color:#666">Waiting for host to retry...</p>';
+        }
+      } else if (msg.gameWon) {
+        showScreen('winScreen');
+        document.getElementById('winLevel').textContent = `Level ${msg.level} Complete!`;
+        document.getElementById('winScore').textContent = `Level Score: ${msg.score}`;
+        document.getElementById('winBonus').textContent = !msg.alertTriggered ? 'No Alert Bonus: +2000!' : '';
+        const nextDiv = document.getElementById('winNext');
+        if (myRole === 'thief') {
+          nextDiv.innerHTML = '<button class="btn btn-green" onclick="sendNextLevel()">[ NEXT LEVEL ]</button>';
+        } else {
+          nextDiv.innerHTML = '<p style="color:#666">Waiting for host to continue...</p>';
+        }
+      } else if (msg.paused) {
+        showScreen('pauseScreen');
+      } else {
+        hideAllOverlays();
+      }
+      break;
+
+    case 'chat':
+      addChatMessage(msg.from, msg.text);
+      break;
+
+    case 'gameComplete':
+      showScreen('completeScreen');
+      document.getElementById('finalScore').textContent = `Total Score: ${msg.totalScore}`;
+      break;
+  }
+}
+
+function sendRetry() { send({ type: 'retry' }); }
+function sendNextLevel() { send({ type: 'nextLevel' }); }
+
+// ============================================================
+// INPUT HANDLING
+// ============================================================
+const keys = {};
+const moveTimers = {};
+const MOVE_DELAY = 150;
+
+window.addEventListener('keydown', (e) => {
+  // Don't capture input when typing in chat
+  if (document.activeElement === document.getElementById('chatText')) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      sendChat();
+    }
+    return;
+  }
+
+  keys[e.key] = true;
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' ','e','E'].includes(e.key)) {
+    e.preventDefault();
+  }
+
+  // Enter on overlay screens
+  if (e.key === 'Enter') {
+    if (document.getElementById('lobbyScreen').style.display !== 'none' &&
+        document.getElementById('lobbyScreen').style.display !== '') {
+      return; // Lobby has its own buttons
+    }
+  }
+});
+
+window.addEventListener('keyup', (e) => {
+  if (document.activeElement === document.getElementById('chatText')) return;
+  keys[e.key] = false;
+  moveTimers[e.key] = 0;
+
+  // Stop picking lock
+  if ((e.key === 'e' || e.key === 'E') && myRole === 'thief') {
+    send({ type: 'input', action: 'pickStop' });
+  }
+});
+
+function processInputs(dt) {
+  if (!ws || ws.readyState !== 1 || !latestState || latestState.gameOver || latestState.gameWon || latestState.paused) return;
+
+  if (myRole === 'thief') {
+    const moves = [
+      { keys: ['w','W'], dx: 0, dy: -1 },
+      { keys: ['s','S'], dx: 0, dy: 1 },
+      { keys: ['a','A'], dx: -1, dy: 0 },
+      { keys: ['d','D'], dx: 1, dy: 0 },
+    ];
+    for (const m of moves) {
+      const held = m.keys.some(k => keys[k]);
+      const tk = 'thief_' + m.keys[0];
+      if (held) {
+        moveTimers[tk] = (moveTimers[tk] || 0) + dt;
+        if (moveTimers[tk] >= MOVE_DELAY || !moveTimers[tk + '_f']) {
+          if (moveTimers[tk] >= MOVE_DELAY) moveTimers[tk] = 0;
+          moveTimers[tk + '_f'] = true;
+          send({ type: 'input', action: 'move', dx: m.dx, dy: m.dy });
+        }
+      } else {
+        moveTimers[tk] = 0;
+        moveTimers[tk + '_f'] = false;
+      }
+    }
+
+    if (keys['e'] || keys['E']) {
+      if (!moveTimers['pick_sent']) {
+        moveTimers['pick_sent'] = true;
+        send({ type: 'input', action: 'pickStart' });
+      }
+    } else {
+      moveTimers['pick_sent'] = false;
+    }
+  }
+
+  if (myRole === 'drone') {
+    const moves = [
+      { key: 'ArrowUp', dx: 0, dy: -1 },
+      { key: 'ArrowDown', dx: 0, dy: 1 },
+      { key: 'ArrowLeft', dx: -1, dy: 0 },
+      { key: 'ArrowRight', dx: 1, dy: 0 },
+    ];
+    for (const m of moves) {
+      const tk = 'drone_' + m.key;
+      if (keys[m.key]) {
+        moveTimers[tk] = (moveTimers[tk] || 0) + dt;
+        if (moveTimers[tk] >= MOVE_DELAY || !moveTimers[tk + '_f']) {
+          if (moveTimers[tk] >= MOVE_DELAY) moveTimers[tk] = 0;
+          moveTimers[tk + '_f'] = true;
+          send({ type: 'input', action: 'move', dx: m.dx, dy: m.dy });
+        }
+      } else {
+        moveTimers[tk] = 0;
+        moveTimers[tk + '_f'] = false;
+      }
+    }
+
+    if (keys[' ']) {
+      if (!moveTimers['hack_sent']) {
+        moveTimers['hack_sent'] = true;
+        send({ type: 'input', action: 'hack' });
+      }
+    } else {
+      moveTimers['hack_sent'] = false;
+    }
+  }
+}
+
+// ============================================================
+// CHAT
+// ============================================================
+function sendChat() {
+  const input = document.getElementById('chatText');
+  const text = input.value.trim();
+  if (!text) return;
+  send({ type: 'chat', text });
+  input.value = '';
+}
+
+function addChatMessage(from, text) {
+  const log = document.getElementById('chatLog');
+  const cls = from === 'THIEF' ? 'thief-msg' : 'drone-msg';
+  const div = document.createElement('div');
+  div.className = cls;
+  div.textContent = `[${from}] ${text}`;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function addChatSystem(text) {
+  const log = document.getElementById('chatLog');
+  const div = document.createElement('div');
+  div.className = 'sys-msg';
+  div.textContent = `> ${text}`;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+document.getElementById('chatSend').addEventListener('click', sendChat);
+
+// ============================================================
+// RENDERING
+// ============================================================
+const TILE = 16;
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const CANVAS_W = 1200;
+const CANVAS_H = 480;
+canvas.width = CANVAS_W;
+canvas.height = CANVAS_H;
+const VIEW_W = Math.floor(CANVAS_W / 2);
+const VIEW_H = CANVAS_H;
+
+function getTileColor(tile, view) {
+  const g = view === 'thief';
+  switch(tile) {
+    case '#': return g ? '#0a1a0a' : '#0a0a1a';
+    case '.': return g ? '#0d1f0d' : '#0d0d1f';
+    case 'D': return '#664400';
+    case 'L': return '#443300';
+    case '*': return '#aa8800';
+    case 'C': return '#880000';
+    case '^': return g ? '#0d1f0d' : '#0d0d1f';
+    case 'A': return '#440044';
+    case '>': return '#004400';
+    default: return g ? '#0d1f0d' : '#0d0d1f';
+  }
+}
+
+function drawTile(x, y, tile, offsetX, offsetY, view, state) {
+  const px = offsetX + x * TILE;
+  const py = offsetY + y * TILE;
+  ctx.fillStyle = getTileColor(tile, view);
+  ctx.fillRect(px, py, TILE, TILE);
+  ctx.strokeStyle = view === 'thief' ? 'rgba(0,255,0,0.04)' : 'rgba(0,100,255,0.04)';
+  ctx.strokeRect(px, py, TILE, TILE);
+  ctx.font = '12px Courier New';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const cx = px + TILE/2, cy = py + TILE/2;
+  switch(tile) {
+    case '#':
+      ctx.fillStyle = view === 'thief' ? '#143314' : '#141433';
+      ctx.fillRect(px+1, py+1, TILE-2, TILE-2);
+      break;
+    case 'D': ctx.fillStyle = '#ff8800'; ctx.fillText('D', cx, cy); break;
+    case 'L': ctx.fillStyle = '#ffaa00'; ctx.fillText('L', cx, cy); break;
+    case '*': ctx.fillStyle = '#ffff00'; ctx.fillText('*', cx, cy); break;
+    case 'C': {
+      const cam = state.cameras.find(c => c.x === x && c.y === y);
+      ctx.fillStyle = cam && cam.active ? '#ff0000' : '#333';
+      ctx.fillText('C', cx, cy);
+      break;
+    }
+    case '^': ctx.fillStyle = '#00ffff'; ctx.fillText('^', cx, cy); break;
+    case 'A': ctx.fillStyle = '#ff00ff'; ctx.fillText('A', cx, cy); break;
+    case '>':
+      ctx.fillStyle = state.exitOpen ? '#00ff00' : '#444';
+      ctx.fillText('>', cx, cy);
+      break;
+  }
+}
+
+function drawGuard(guard, offsetX, offsetY, view) {
+  const px = offsetX + guard.x * TILE;
+  const py = offsetY + guard.y * TILE;
+  ctx.font = 'bold 13px Courier New';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = guard.frozen ? '#666666' : '#ff3333';
+  ctx.fillText('G', px + TILE/2, py + TILE/2);
+  if (!guard.frozen && view === 'drone') {
+    const dirVecs = [{x:0,y:-1},{x:1,y:0},{x:0,y:1},{x:-1,y:0}];
+    const dv = dirVecs[guard.dir];
+    ctx.fillStyle = 'rgba(255,0,0,0.08)';
+    for (let i = 1; i <= 3; i++) {
+      const vx = guard.x + dv.x * i, vy = guard.y + dv.y * i;
+      ctx.fillRect(offsetX + vx * TILE, offsetY + vy * TILE, TILE, TILE);
+    }
+  }
+}
+
+function drawView(state, view, offsetX) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(offsetX, 0, VIEW_W, VIEW_H);
+  ctx.clip();
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(offsetX, 0, VIEW_W, VIEW_H);
+
+  const mapPixelW = state.mapWidth * TILE;
+  const mapPixelH = state.mapHeight * TILE;
+  let camX, camY;
+  if (view === 'thief') {
+    camX = state.thief.x * TILE + TILE/2 - VIEW_W/2;
+    camY = state.thief.y * TILE + TILE/2 - VIEW_H/2;
+  } else {
+    camX = mapPixelW/2 - VIEW_W/2;
+    camY = mapPixelH/2 - VIEW_H/2;
+  }
+  camX = Math.max(0, Math.min(mapPixelW - VIEW_W, camX));
+  camY = Math.max(0, Math.min(mapPixelH - VIEW_H, camY));
+
+  const drawOffX = offsetX - camX;
+  const drawOffY = -camY;
+  const startTX = Math.max(0, Math.floor(camX / TILE));
+  const startTY = Math.max(0, Math.floor(camY / TILE));
+  const endTX = Math.min(state.mapWidth - 1, Math.ceil((camX + VIEW_W) / TILE));
+  const endTY = Math.min(state.mapHeight - 1, Math.ceil((camY + VIEW_H) / TILE));
+
+  const thiefVision = 4;
+  for (let y = startTY; y <= endTY; y++) {
+    for (let x = startTX; x <= endTX; x++) {
+      if (view === 'thief') {
+        const dist = Math.abs(x - state.thief.x) + Math.abs(y - state.thief.y);
+        if (dist > thiefVision) {
+          const px = drawOffX + x * TILE;
+          const py = drawOffY + y * TILE;
+          ctx.fillStyle = '#050a05';
+          ctx.fillRect(px, py, TILE, TILE);
+          continue;
+        }
+      }
+      drawTile(x, y, state.map[y][x], drawOffX, drawOffY, view, state);
+    }
+  }
+
+  for (const guard of state.guards) {
+    if (view === 'thief') {
+      const dist = Math.abs(guard.x - state.thief.x) + Math.abs(guard.y - state.thief.y);
+      if (dist > thiefVision) continue;
+    }
+    drawGuard(guard, drawOffX, drawOffY, view);
+  }
+
+  // Thief
+  const tpx = drawOffX + state.thief.x * TILE;
+  const tpy = drawOffY + state.thief.y * TILE;
+  ctx.font = 'bold 14px Courier New';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  if (state.thief.invulnTimer <= 0 || Math.floor(Date.now() / 100) % 2 === 0) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('@', tpx + TILE/2, tpy + TILE/2);
+  }
+
+  // Drone cursor
+  if (view === 'drone') {
+    const dpx = drawOffX + state.drone.x * TILE;
+    const dpy = drawOffY + state.drone.y * TILE;
+    ctx.strokeStyle = state.drone.battery > 0 ? '#33aaff' : '#333';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(dpx - 1, dpy - 1, TILE + 2, TILE + 2);
+    ctx.beginPath();
+    ctx.moveTo(dpx + TILE/2, dpy - 3);
+    ctx.lineTo(dpx + TILE/2, dpy + TILE + 3);
+    ctx.moveTo(dpx - 3, dpy + TILE/2);
+    ctx.lineTo(dpx + TILE + 3, dpy + TILE/2);
+    ctx.strokeStyle = 'rgba(51,170,255,0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Scanlines
+  ctx.fillStyle = view === 'thief' ? 'rgba(0,255,0,0.015)' : 'rgba(0,100,255,0.015)';
+  for (let sy = 0; sy < VIEW_H; sy += 3) ctx.fillRect(offsetX, sy, VIEW_W, 1);
+
+  // Label
+  ctx.font = '10px Courier New'; ctx.textAlign = 'left';
+  ctx.fillStyle = view === 'thief' ? 'rgba(0,255,0,0.3)' : 'rgba(0,100,255,0.3)';
+  ctx.fillText(view === 'thief' ? '[ THIEF CAM ]' : '[ DRONE FEED ]', offsetX + 8, 14);
+
+  // Role indicator
+  if ((view === 'thief' && myRole === 'thief') || (view === 'drone' && myRole === 'drone')) {
+    ctx.fillStyle = view === 'thief' ? 'rgba(0,255,0,0.2)' : 'rgba(0,100,255,0.2)';
+    ctx.font = '9px Courier New';
+    ctx.fillText('[ YOU ]', offsetX + 8, 26);
+  }
+
+  // Alarm flash
+  if (state.alarmActive) {
+    const flash = Math.sin(Date.now() / 100) * 0.5 + 0.5;
+    ctx.fillStyle = `rgba(255,0,0,${flash * 0.08})`;
+    ctx.fillRect(offsetX, 0, VIEW_W, VIEW_H);
+  }
+
+  // Divider
+  if (view === 'thief') {
+    ctx.strokeStyle = '#222'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(offsetX + VIEW_W, 0);
+    ctx.lineTo(offsetX + VIEW_W, VIEW_H);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function render(state) {
+  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+  drawView(state, 'thief', 0);
+  drawView(state, 'drone', VIEW_W);
+
+  // UI panels
+  const tp = document.getElementById('thiefPanel');
+  const hpPct = (state.thief.hp / state.thief.maxHp) * 100;
+  const hpColor = state.thief.hp > 1 ? '#33ff33' : '#ff3333';
+  tp.innerHTML = `
+    <b>THIEF</b> &nbsp; HP: <span class="bar-bg"><span class="bar-fill" style="width:${hpPct}%;background:${hpColor}"></span></span> ${state.thief.hp}/${state.thief.maxHp}<br>
+    Loot: ${state.primaryLootCollected}/${state.primaryLootTotal} primary | ${state.bonusLootCollected} bonus<br>
+    ${state.thief.picking ? `Picking lock: ${Math.ceil(state.thief.pickTimer/1000)}s` : state.thief.spotted ? '<span style="color:#ff3333">!! SPOTTED !!</span>' : 'Status: Ready'}
+  `;
+
+  const dp = document.getElementById('dronePanel');
+  const batPct = (state.drone.battery / state.drone.maxBattery) * 100;
+  const batColor = state.drone.battery > 25 ? '#33aaff' : '#ff8800';
+  dp.innerHTML = `
+    <b>DRONE</b> &nbsp; Battery: <span class="bar-bg"><span class="bar-fill" style="width:${batPct}%;background:${batColor}"></span></span> ${state.drone.battery}%<br>
+    Hacks: ${state.drone.hacks} | ${state.drone.charging ? '<span style="color:#00ffff">CHARGING...</span>' : state.drone.battery <= 0 ? '<span style="color:#ff3333">NO POWER</span>' : 'Online'}<br>
+    Guards frozen: ${state.guards.filter(g => g.frozen).length} | Cameras: ${state.cameras.filter(c => c.active).length} active
+  `;
+
+  const cp = document.getElementById('centerPanel');
+  const elapsed = Math.floor(state.timer / 1000);
+  const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const secs = String(elapsed % 60).padStart(2, '0');
+  cp.innerHTML = `
+    <b>LEVEL ${state.level}</b> &nbsp; <span class="role-badge ${myRole}">${myRole ? myRole.toUpperCase() : ''}</span><br>
+    Time: ${mins}:${secs}<br>
+    ${state.alarmActive ? `<span style="color:#ff3333">ALARM: ${Math.ceil(state.alarmTimer/1000)}s</span>` : state.exitOpen ? '<span style="color:#33ff33">EXIT OPEN</span>' : `Loot: ${state.primaryLootCollected}/${state.primaryLootTotal}`}
+  `;
+}
+
+// ============================================================
+// SCREEN MANAGEMENT
+// ============================================================
+const allScreens = ['lobbyScreen','waitScreen','pauseScreen','gameOverScreen','winScreen','completeScreen'];
+
+function hideAllOverlays() {
+  allScreens.forEach(id => document.getElementById(id).style.display = 'none');
+}
+
+function showScreen(id) {
+  hideAllOverlays();
+  document.getElementById(id).style.display = 'flex';
+}
+
+function showGame() {
+  hideAllOverlays();
+  document.getElementById('game').style.display = 'block';
+  document.getElementById('ui').style.display = 'flex';
+  document.getElementById('chatArea').style.display = 'flex';
+  gameVisible = true;
+}
+
+// ============================================================
+// LOBBY BUTTONS
+// ============================================================
+document.getElementById('btnHost').addEventListener('click', () => {
+  connect(() => { send({ type: 'host' }); });
+});
+
+document.getElementById('btnJoinShow').addEventListener('click', () => {
+  document.getElementById('joinArea').style.display = 'block';
+  document.getElementById('codeInput').focus();
+});
+
+document.getElementById('btnJoin').addEventListener('click', () => {
+  const code = document.getElementById('codeInput').value.trim().toUpperCase();
+  if (code.length !== 4) {
+    document.getElementById('joinError').textContent = 'Enter a 4-letter code';
+    return;
+  }
+  document.getElementById('joinError').textContent = '';
+  connect(() => { send({ type: 'join', code }); });
+});
+
+document.getElementById('codeInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('btnJoin').click();
+});
+
+// ============================================================
+// MAIN RENDER LOOP
+// ============================================================
+let lastFrame = 0;
+
+function frame(time) {
+  const dt = lastFrame ? Math.min(time - lastFrame, 50) : 16;
+  lastFrame = time;
+
+  processInputs(dt);
+  if (latestState && gameVisible) render(latestState);
+
+  requestAnimationFrame(frame);
+}
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

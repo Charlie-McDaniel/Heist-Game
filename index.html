@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>HEIST // Co-Op Terminal Heist</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a0a; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: 'Courier New', monospace; color: #33ff33; overflow: hidden; }
+canvas { display: block; image-rendering: pixelated; }
+#ui { display: flex; width: 1200px; height: 80px; margin-top: 4px; gap: 4px; }
+.panel { flex: 1; background: #111; border: 1px solid #222; padding: 8px; font-size: 12px; line-height: 1.6; }
+.panel.thief { border-color: #1a3a1a; color: #33ff33; }
+.panel.center { text-align: center; border-color: #333; color: #aaa; }
+.panel.drone { border-color: #1a1a3a; color: #33aaff; }
+.bar-bg { display: inline-block; width: 80px; height: 10px; background: #222; vertical-align: middle; }
+.bar-fill { height: 100%; transition: width 0.2s; }
+#startScreen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #0a0a0a; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; }
+#startScreen h1 { font-size: 48px; color: #33ff33; text-shadow: 0 0 20px #33ff33; margin-bottom: 10px; }
+#startScreen .sub { color: #1a8a1a; font-size: 16px; margin-bottom: 30px; }
+#startScreen .controls { display: flex; gap: 60px; margin-bottom: 30px; }
+#startScreen .ctrl-col { text-align: center; }
+#startScreen .ctrl-col h3 { margin-bottom: 8px; font-size: 18px; }
+#startScreen .ctrl-col.t { color: #33ff33; }
+#startScreen .ctrl-col.d { color: #33aaff; }
+#startScreen .ctrl-col p { color: #888; font-size: 13px; line-height: 1.8; }
+#startScreen .start-btn { font-family: 'Courier New', monospace; font-size: 20px; padding: 12px 40px; background: none; border: 2px solid #33ff33; color: #33ff33; cursor: pointer; text-shadow: 0 0 10px #33ff33; }
+#startScreen .start-btn:hover { background: #1a3a1a; }
+#gameOver { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10,0,0,0.9); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 10; }
+#gameOver h1 { font-size: 40px; color: #ff3333; margin-bottom: 20px; }
+#gameOver p { color: #aa3333; font-size: 16px; margin-bottom: 10px; }
+#gameOver .start-btn { font-family: 'Courier New', monospace; font-size: 18px; padding: 10px 30px; background: none; border: 2px solid #ff3333; color: #ff3333; cursor: pointer; margin-top: 20px; }
+#winScreen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,10,0,0.9); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 10; }
+#winScreen h1 { font-size: 40px; color: #33ff33; margin-bottom: 20px; text-shadow: 0 0 20px #33ff33; }
+#winScreen p { color: #1a8a1a; font-size: 16px; margin-bottom: 10px; }
+#winScreen .start-btn { font-family: 'Courier New', monospace; font-size: 18px; padding: 10px 30px; background: none; border: 2px solid #33ff33; color: #33ff33; cursor: pointer; margin-top: 20px; }
+</style>
+</head>
+<body>
+
+<div id="startScreen">
+  <h1>// HEIST //</h1>
+  <p class="sub">A Co-Op Terminal Heist Game</p>
+  <div class="controls">
+    <div class="ctrl-col t">
+      <h3>PLAYER 1 — THIEF</h3>
+      <p>WASD — Move<br>E (hold) — Pick Lock<br>Collect all loot, reach exit</p>
+    </div>
+    <div class="ctrl-col d">
+      <h3>PLAYER 2 — DRONE</h3>
+      <p>Arrow Keys — Move Cursor<br>Space — Hack Target<br>Hover charging pads to recharge</p>
+    </div>
+  </div>
+  <button class="start-btn" id="btnStart">[ PRESS ENTER TO BEGIN ]</button>
+</div>
+
+<div id="gameOver">
+  <h1>// BUSTED //</h1>
+  <p id="goReason">The thief was caught!</p>
+  <p id="goScore">Score: 0</p>
+  <button class="start-btn" id="btnRetry">[ PRESS ENTER TO RETRY ]</button>
+</div>
+
+<div id="winScreen">
+  <h1>// HEIST COMPLETE //</h1>
+  <p id="winLevel"></p>
+  <p id="winScore"></p>
+  <p id="winBonus"></p>
+  <button class="start-btn" id="btnNext">[ PRESS ENTER TO CONTINUE ]</button>
+</div>
+
+<canvas id="game"></canvas>
+<div id="ui">
+  <div class="panel thief" id="thiefPanel"></div>
+  <div class="panel center" id="centerPanel"></div>
+  <div class="panel drone" id="dronePanel"></div>
+</div>
+
+<script>
+// ============================================================
+// AUDIO MODULE
+// ============================================================
+const Audio = (() => {
+  let ctx = null;
+  function getCtx() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    return ctx;
+  }
+  function play(freq, dur, type = 'square', vol = 0.1) {
+    try {
+      const c = getCtx();
+      const o = c.createOscillator();
+      const g = c.createGain();
+      o.type = type;
+      o.frequency.value = freq;
+      g.gain.value = vol;
+      g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur);
+      o.connect(g);
+      g.connect(c.destination);
+      o.start();
+      o.stop(c.currentTime + dur);
+    } catch(e) {}
+  }
+  return {
+    moveBeep: () => play(120, 0.08, 'square', 0.06),
+    hackBeep: () => play(800, 0.15, 'sine', 0.08),
+    alarmSound: () => { play(400, 0.2, 'sawtooth', 0.12); setTimeout(() => play(600, 0.2, 'sawtooth', 0.12), 200); },
+    hitSound: () => play(80, 0.3, 'sawtooth', 0.15),
+    lootSound: () => { play(600, 0.1, 'sine', 0.1); setTimeout(() => play(900, 0.15, 'sine', 0.1), 100); },
+    lockSound: () => play(200, 0.1, 'triangle', 0.05),
+    doorOpen: () => play(500, 0.2, 'sine', 0.08),
+    victory: () => {
+      [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => play(f, 0.3, 'sine', 0.1), i * 150));
+    },
+    gameOverSound: () => {
+      [400, 300, 200, 100].forEach((f, i) => setTimeout(() => play(f, 0.4, 'sawtooth', 0.1), i * 200));
+    },
+    chargeSound: () => play(1200, 0.05, 'sine', 0.04),
+  };
+})();
+
+// ============================================================
+// MAP GENERATOR
+// ============================================================
+function generateLevel(level) {
+  const W = 40, H = 30;
+  const map = [];
+  for (let y = 0; y < H; y++) {
+    map[y] = [];
+    for (let x = 0; x < W; x++) map[y][x] = '#';
+  }
+
+  const rooms = [];
+  const minRooms = 6 + level;
+  const maxRooms = 8 + level;
+  const targetRooms = minRooms + Math.floor(Math.random() * (maxRooms - minRooms + 1));
+
+  for (let attempt = 0; attempt < 300 && rooms.length < targetRooms; attempt++) {
+    const rw = 4 + Math.floor(Math.random() * 5);
+    const rh = 3 + Math.floor(Math.random() * 4);
+    const rx = 1 + Math.floor(Math.random() * (W - rw - 2));
+    const ry = 1 + Math.floor(Math.random() * (H - rh - 2));
+
+    let overlap = false;
+    for (const r of rooms) {
+      if (rx - 1 < r.x + r.w && rx + rw + 1 > r.x && ry - 1 < r.y + r.h && ry + rh + 1 > r.y) {
+        overlap = true; break;
+      }
+    }
+    if (overlap) continue;
+    rooms.push({ x: rx, y: ry, w: rw, h: rh });
+    for (let dy = 0; dy < rh; dy++)
+      for (let dx = 0; dx < rw; dx++)
+        map[ry + dy][rx + dx] = '.';
+  }
+
+  // Connect rooms with corridors
+  const connected = [0];
+  const unconnected = rooms.map((_, i) => i).slice(1);
+
+  while (unconnected.length > 0) {
+    let bestDist = Infinity, bestC = 0, bestU = 0;
+    for (const ci of connected) {
+      for (const ui of unconnected) {
+        const cx = rooms[ci].x + Math.floor(rooms[ci].w / 2);
+        const cy = rooms[ci].y + Math.floor(rooms[ci].h / 2);
+        const ux = rooms[ui].x + Math.floor(rooms[ui].w / 2);
+        const uy = rooms[ui].y + Math.floor(rooms[ui].h / 2);
+        const d = Math.abs(cx - ux) + Math.abs(cy - uy);
+        if (d < bestDist) { bestDist = d; bestC = ci; bestU = ui; }
+      }
+    }
+
+    const r1 = rooms[bestC], r2 = rooms[bestU];
+    let x1 = r1.x + Math.floor(r1.w / 2), y1 = r1.y + Math.floor(r1.h / 2);
+    let x2 = r2.x + Math.floor(r2.w / 2), y2 = r2.y + Math.floor(r2.h / 2);
+
+    let cx = x1, cy = y1;
+    while (cx !== x2) {
+      if (map[cy][cx] === '#') map[cy][cx] = '.';
+      cx += cx < x2 ? 1 : -1;
+    }
+    while (cy !== y2) {
+      if (map[cy][cx] === '#') map[cy][cx] = '.';
+      cy += cy < y2 ? 1 : -1;
+    }
+
+    connected.push(bestU);
+    unconnected.splice(unconnected.indexOf(bestU), 1);
+  }
+
+  // Place doors at corridor-room transitions
+  const doors = [];
+  const eDoorPositions = [];
+  const pDoorPositions = [];
+
+  for (let y = 1; y < H - 1; y++) {
+    for (let x = 1; x < W - 1; x++) {
+      if (map[y][x] !== '.') continue;
+      const hWall = map[y][x-1] === '#' && map[y][x+1] === '#' && map[y-1][x] === '.' && map[y+1][x] === '.';
+      const vWall = map[y-1][x] === '#' && map[y+1][x] === '#' && map[y][x-1] === '.' && map[y][x+1] === '.';
+      if ((hWall || vWall) && Math.random() < 0.35) {
+        if (Math.random() < 0.5) {
+          eDoorPositions.push({ x, y });
+        } else {
+          pDoorPositions.push({ x, y });
+        }
+      }
+    }
+  }
+
+  // Limit doors
+  const maxEDoors = 3 + level;
+  const maxPDoors = 2 + level;
+  const eDoors = eDoorPositions.sort(() => Math.random() - 0.5).slice(0, maxEDoors);
+  const pDoors = pDoorPositions.sort(() => Math.random() - 0.5).slice(0, maxPDoors);
+
+  eDoors.forEach(d => { map[d.y][d.x] = 'D'; doors.push({ x: d.x, y: d.y, type: 'electronic', open: false }); });
+  pDoors.forEach(d => { map[d.y][d.x] = 'L'; doors.push({ x: d.x, y: d.y, type: 'physical', open: false }); });
+
+  // Helper: find open floor tiles
+  function getFloorTiles() {
+    const tiles = [];
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++)
+        if (map[y][x] === '.') tiles.push({ x, y });
+    return tiles;
+  }
+
+  function pickAndRemove(tiles) {
+    const idx = Math.floor(Math.random() * tiles.length);
+    return tiles.splice(idx, 1)[0];
+  }
+
+  function tileInRoom(tile, room) {
+    return tile.x >= room.x && tile.x < room.x + room.w && tile.y >= room.y && tile.y < room.y + room.h;
+  }
+
+  const floors = getFloorTiles();
+
+  // Place thief in first room
+  const thiefRoom = rooms[0];
+  let thiefPos = null;
+  for (let i = floors.length - 1; i >= 0; i--) {
+    if (tileInRoom(floors[i], thiefRoom)) {
+      thiefPos = floors.splice(i, 1)[0];
+      break;
+    }
+  }
+  if (!thiefPos) thiefPos = pickAndRemove(floors);
+
+  // Place exit in last room
+  const exitRoom = rooms[rooms.length - 1];
+  let exitPos = null;
+  for (let i = floors.length - 1; i >= 0; i--) {
+    if (tileInRoom(floors[i], exitRoom)) {
+      exitPos = floors.splice(i, 1)[0];
+      break;
+    }
+  }
+  if (!exitPos) exitPos = pickAndRemove(floors);
+  map[exitPos.y][exitPos.x] = '>';
+
+  // Place loot (3 primary + 1-2 bonus)
+  const loot = [];
+  for (let i = 0; i < 3; i++) {
+    const p = pickAndRemove(floors);
+    if (p) { map[p.y][p.x] = '*'; loot.push({ x: p.x, y: p.y, primary: true, collected: false }); }
+  }
+  const bonusCount = 1 + Math.floor(Math.random() * 2);
+  for (let i = 0; i < bonusCount; i++) {
+    const p = pickAndRemove(floors);
+    if (p) { map[p.y][p.x] = '*'; loot.push({ x: p.x, y: p.y, primary: false, collected: false }); }
+  }
+
+  // Place charging pads
+  const chargingPads = [];
+  for (let i = 0; i < 2; i++) {
+    const p = pickAndRemove(floors);
+    if (p) { map[p.y][p.x] = '^'; chargingPads.push({ x: p.x, y: p.y }); }
+  }
+
+  // Place alarm panel
+  const alarmPanels = [];
+  const ap = pickAndRemove(floors);
+  if (ap) { map[ap.y][ap.x] = 'A'; alarmPanels.push({ x: ap.x, y: ap.y }); }
+
+  // Place cameras
+  const cameras = [];
+  const camCount = 2 + level;
+  for (let i = 0; i < camCount; i++) {
+    const p = pickAndRemove(floors);
+    if (p) { map[p.y][p.x] = 'C'; cameras.push({ x: p.x, y: p.y, active: true }); }
+  }
+
+  // Place guards with patrol routes
+  const guards = [];
+  const guardCount = 3 + Math.min(level, 2);
+  for (let i = 0; i < guardCount; i++) {
+    const roomIdx = (i + 1) % rooms.length;
+    const room = rooms[roomIdx];
+    // Create patrol route within room
+    const route = [];
+    const gx = room.x + 1 + Math.floor(Math.random() * Math.max(1, room.w - 2));
+    const gy = room.y + 1 + Math.floor(Math.random() * Math.max(1, room.h - 2));
+    route.push({ x: gx, y: gy });
+    // Add 2-4 patrol waypoints
+    const waypointCount = 2 + Math.floor(Math.random() * 3);
+    for (let w = 0; w < waypointCount; w++) {
+      const wx = room.x + 1 + Math.floor(Math.random() * Math.max(1, room.w - 2));
+      const wy = room.y + 1 + Math.floor(Math.random() * Math.max(1, room.h - 2));
+      route.push({ x: wx, y: wy });
+    }
+
+    guards.push({
+      x: gx, y: gy,
+      route: route,
+      routeIdx: 0,
+      dir: 0, // 0=up, 1=right, 2=down, 3=left
+      frozen: false,
+      frozenTimer: 0,
+      speed: Math.max(300, 500 - level * 50),
+      moveTimer: 0,
+    });
+  }
+
+  return {
+    width: W,
+    height: H,
+    map,
+    rooms,
+    doors,
+    loot,
+    chargingPads,
+    alarmPanels,
+    cameras,
+    guards,
+    thiefStart: thiefPos,
+    exitPos,
+  };
+}
+
+// ============================================================
+// GAME STATE
+// ============================================================
+function createGameState(level) {
+  const levelData = generateLevel(level);
+  return {
+    level,
+    map: levelData.map,
+    mapWidth: levelData.width,
+    mapHeight: levelData.height,
+    rooms: levelData.rooms,
+    thief: {
+      x: levelData.thiefStart.x,
+      y: levelData.thiefStart.y,
+      hp: 3,
+      maxHp: 3,
+      loot: 0,
+      totalLoot: 0,
+      picking: false,
+      pickTimer: 0,
+      pickTarget: null,
+      spotted: false,
+      invulnTimer: 0,
+      action: 'Idle',
+    },
+    drone: {
+      x: Math.floor(levelData.width / 2),
+      y: Math.floor(levelData.height / 2),
+      battery: 100,
+      maxBattery: 100,
+      hacks: 0,
+      charging: false,
+      chargeTimer: 0,
+    },
+    guards: levelData.guards,
+    doors: levelData.doors,
+    loot: levelData.loot,
+    cameras: levelData.cameras,
+    chargingPads: levelData.chargingPads,
+    alarmPanels: levelData.alarmPanels,
+    exitPos: levelData.exitPos,
+    alarmActive: false,
+    alarmTimer: 0,
+    primaryLootTotal: levelData.loot.filter(l => l.primary).length,
+    primaryLootCollected: 0,
+    bonusLootCollected: 0,
+    exitOpen: false,
+    gameOver: false,
+    gameWon: false,
+    timer: 0,
+    score: 0,
+    alertTriggered: false,
+  };
+}
+
+// ============================================================
+// GAME LOGIC (pure-ish functions)
+// ============================================================
+function isWalkable(state, x, y, isThief = true) {
+  if (x < 0 || x >= state.mapWidth || y < 0 || y >= state.mapHeight) return false;
+  const tile = state.map[y][x];
+  if (tile === '#') return false;
+  if (tile === 'D' || tile === 'L') {
+    // Check if door is open
+    const door = state.doors.find(d => d.x === x && d.y === y);
+    if (door && !door.open) return false;
+  }
+  return true;
+}
+
+function moveThief(state, dx, dy) {
+  if (state.gameOver || state.gameWon) return state;
+  if (state.thief.picking) return state;
+  const nx = state.thief.x + dx;
+  const ny = state.thief.y + dy;
+  if (!isWalkable(state, nx, ny, true)) return state;
+
+  state.thief.x = nx;
+  state.thief.y = ny;
+  Audio.moveBeep();
+
+  // Check loot pickup
+  const lootItem = state.loot.find(l => l.x === nx && l.y === ny && !l.collected);
+  if (lootItem) {
+    lootItem.collected = true;
+    state.thief.loot++;
+    state.thief.totalLoot++;
+    if (lootItem.primary) state.primaryLootCollected++;
+    else state.bonusLootCollected++;
+    state.map[ny][nx] = '.';
+    Audio.lootSound();
+
+    if (state.primaryLootCollected >= state.primaryLootTotal) {
+      state.exitOpen = true;
+    }
+  }
+
+  // Check exit
+  if (state.map[ny][nx] === '>' && state.exitOpen) {
+    state.gameWon = true;
+    state.score += state.primaryLootCollected * 1000;
+    state.score += state.bonusLootCollected * 500;
+    state.score += Math.max(0, 3000 - Math.floor(state.timer / 1000) * 10);
+    if (!state.alertTriggered) state.score += 2000;
+    Audio.victory();
+  }
+
+  return state;
+}
+
+function startPickLock(state) {
+  if (state.gameOver || state.gameWon || state.thief.picking) return state;
+  // Check adjacent tiles for locked physical doors
+  const dirs = [{x:0,y:-1},{x:1,y:0},{x:0,y:1},{x:-1,y:0}];
+  for (const d of dirs) {
+    const tx = state.thief.x + d.x;
+    const ty = state.thief.y + d.y;
+    const door = state.doors.find(dr => dr.x === tx && dr.y === ty && dr.type === 'physical' && !dr.open);
+    if (door) {
+      state.thief.picking = true;
+      state.thief.pickTimer = 3000;
+      state.thief.pickTarget = door;
+      state.thief.action = 'Picking lock...';
+      Audio.lockSound();
+      return state;
+    }
+  }
+  return state;
+}
+
+function updatePickLock(state, dt) {
+  if (!state.thief.picking) return state;
+  state.thief.pickTimer -= dt;
+  if (state.thief.pickTimer <= 0) {
+    state.thief.pickTarget.open = true;
+    state.map[state.thief.pickTarget.y][state.thief.pickTarget.x] = '.';
+    state.thief.picking = false;
+    state.thief.pickTarget = null;
+    state.thief.action = 'Idle';
+    Audio.doorOpen();
+  }
+  return state;
+}
+
+function droneHack(state) {
+  if (state.gameOver || state.gameWon) return state;
+  if (state.drone.battery <= 0) return state;
+
+  const dx = state.drone.x, dy = state.drone.y;
+
+  // Check electronic doors
+  const door = state.doors.find(d => d.x === dx && d.y === dy && d.type === 'electronic' && !d.open);
+  if (door) {
+    door.open = true;
+    state.map[dy][dx] = '.';
+    state.drone.battery = Math.max(0, state.drone.battery - 25);
+    state.drone.hacks++;
+    Audio.hackBeep();
+    Audio.doorOpen();
+    return state;
+  }
+
+  // Check cameras
+  const cam = state.cameras.find(c => c.x === dx && c.y === dy && c.active);
+  if (cam) {
+    cam.active = false;
+    state.map[dy][dx] = '.';
+    state.drone.battery = Math.max(0, state.drone.battery - 25);
+    state.drone.hacks++;
+    Audio.hackBeep();
+    return state;
+  }
+
+  // Check guards (freeze)
+  const guard = state.guards.find(g => g.x === dx && g.y === dy && !g.frozen);
+  if (guard) {
+    guard.frozen = true;
+    guard.frozenTimer = 5000;
+    state.drone.battery = Math.max(0, state.drone.battery - 25);
+    state.drone.hacks++;
+    Audio.hackBeep();
+    return state;
+  }
+
+  // Check alarm panel
+  if (state.alarmActive) {
+    const panel = state.alarmPanels.find(a => a.x === dx && a.y === dy);
+    if (panel) {
+      state.alarmActive = false;
+      state.alarmTimer = 0;
+      state.thief.spotted = false;
+      state.drone.battery = Math.max(0, state.drone.battery - 25);
+      state.drone.hacks++;
+      Audio.hackBeep();
+      return state;
+    }
+  }
+
+  return state;
+}
+
+function updateDroneCharge(state, dt) {
+  const pad = state.chargingPads.find(p => p.x === state.drone.x && p.y === state.drone.y);
+  if (pad && state.drone.battery < state.drone.maxBattery) {
+    state.drone.charging = true;
+    state.drone.chargeTimer += dt;
+    if (state.drone.chargeTimer >= 3000) {
+      state.drone.battery = Math.min(state.drone.maxBattery, state.drone.battery + 25);
+      state.drone.chargeTimer = 0;
+      Audio.chargeSound();
+    }
+  } else {
+    state.drone.charging = false;
+    state.drone.chargeTimer = 0;
+  }
+  return state;
+}
+
+function updateGuards(state, dt) {
+  for (const guard of state.guards) {
+    if (guard.frozen) {
+      guard.frozenTimer -= dt;
+      if (guard.frozenTimer <= 0) {
+        guard.frozen = false;
+        guard.frozenTimer = 0;
+      }
+      continue;
+    }
+
+    guard.moveTimer += dt;
+    if (guard.moveTimer < guard.speed) continue;
+    guard.moveTimer = 0;
+
+    // Move toward current waypoint
+    const target = guard.route[guard.routeIdx];
+    let moved = false;
+
+    if (guard.x !== target.x || guard.y !== target.y) {
+      let dx = 0, dy = 0;
+      if (Math.abs(target.x - guard.x) > Math.abs(target.y - guard.y)) {
+        dx = target.x > guard.x ? 1 : -1;
+      } else {
+        dy = target.y > guard.y ? 1 : -1;
+      }
+
+      const nx = guard.x + dx;
+      const ny = guard.y + dy;
+      if (isWalkable(state, nx, ny, false)) {
+        guard.x = nx;
+        guard.y = ny;
+        // Update direction
+        if (dx === 1) guard.dir = 1;
+        else if (dx === -1) guard.dir = 3;
+        else if (dy === -1) guard.dir = 0;
+        else if (dy === 1) guard.dir = 2;
+        moved = true;
+      }
+    }
+
+    if (!moved || (guard.x === target.x && guard.y === target.y)) {
+      guard.routeIdx = (guard.routeIdx + 1) % guard.route.length;
+    }
+
+    // Guard vision check
+    if (!guard.frozen) {
+      const visionRange = 3;
+      const dirVecs = [{x:0,y:-1},{x:1,y:0},{x:0,y:1},{x:-1,y:0}];
+      const dv = dirVecs[guard.dir];
+      let canSee = false;
+
+      for (let i = 1; i <= visionRange; i++) {
+        const vx = guard.x + dv.x * i;
+        const vy = guard.y + dv.y * i;
+        if (vx < 0 || vx >= state.mapWidth || vy < 0 || vy >= state.mapHeight) break;
+        if (state.map[vy][vx] === '#') break;
+
+        // Check if camera is disabled at that position (cameras don't block vision, but let's just check thief)
+        if (vx === state.thief.x && vy === state.thief.y) {
+          canSee = true;
+          break;
+        }
+      }
+
+      // Also check if guard is on thief's tile
+      if (guard.x === state.thief.x && guard.y === state.thief.y) {
+        canSee = true;
+      }
+
+      if (canSee && !state.alarmActive) {
+        state.alarmActive = true;
+        state.alarmTimer = 10000;
+        state.thief.spotted = true;
+        state.thief.action = 'SPOTTED!';
+        state.alertTriggered = true;
+        Audio.alarmSound();
+      }
+
+      // Direct contact damage
+      if (guard.x === state.thief.x && guard.y === state.thief.y && state.thief.invulnTimer <= 0) {
+        state.thief.hp--;
+        state.thief.invulnTimer = 1500;
+        Audio.hitSound();
+        if (state.thief.hp <= 0) {
+          state.gameOver = true;
+          Audio.gameOverSound();
+        }
+      }
+    }
+  }
+
+  // Camera vision check
+  for (const cam of state.cameras) {
+    if (!cam.active) continue;
+    const dist = Math.abs(cam.x - state.thief.x) + Math.abs(cam.y - state.thief.y);
+    if (dist <= 2 && !state.alarmActive) {
+      state.alarmActive = true;
+      state.alarmTimer = 10000;
+      state.thief.spotted = true;
+      state.thief.action = 'SPOTTED!';
+      state.alertTriggered = true;
+      Audio.alarmSound();
+    }
+  }
+
+  return state;
+}
+
+function updateAlarm(state, dt) {
+  if (!state.alarmActive) {
+    if (state.thief.spotted) {
+      state.thief.spotted = false;
+      state.thief.action = 'Idle';
+    }
+    return state;
+  }
+  state.alarmTimer -= dt;
+  if (state.alarmTimer <= 0) {
+    // Alarm went off — thief caught
+    state.thief.hp--;
+    Audio.hitSound();
+    state.alarmActive = false;
+    state.alarmTimer = 0;
+    if (state.thief.hp <= 0) {
+      state.gameOver = true;
+      Audio.gameOverSound();
+    } else {
+      state.thief.spotted = false;
+      state.thief.action = 'Idle';
+    }
+  }
+  return state;
+}
+
+function updateInvuln(state, dt) {
+  if (state.thief.invulnTimer > 0) {
+    state.thief.invulnTimer -= dt;
+  }
+  return state;
+}
+
+// ============================================================
+// RENDERING
+// ============================================================
+const TILE = 16;
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const CANVAS_W = 1200;
+const CANVAS_H = 480;
+canvas.width = CANVAS_W;
+canvas.height = CANVAS_H;
+
+const VIEW_W = Math.floor(CANVAS_W / 2);
+const VIEW_H = CANVAS_H;
+
+function getTileColor(tile, view) {
+  const g = view === 'thief';
+  switch(tile) {
+    case '#': return g ? '#0a1a0a' : '#0a0a1a';
+    case '.': return g ? '#0d1f0d' : '#0d0d1f';
+    case 'D': return '#664400';
+    case 'L': return '#443300';
+    case '*': return '#aa8800';
+    case 'C': return '#880000';
+    case '^': return g ? '#0d1f0d' : '#0d0d1f';
+    case 'A': return '#440044';
+    case '>': return '#004400';
+    default: return g ? '#0d1f0d' : '#0d0d1f';
+  }
+}
+
+function drawTile(x, y, tile, offsetX, offsetY, view, state) {
+  const px = offsetX + x * TILE;
+  const py = offsetY + y * TILE;
+
+  // Background
+  ctx.fillStyle = getTileColor(tile, view);
+  ctx.fillRect(px, py, TILE, TILE);
+
+  // Grid lines
+  ctx.strokeStyle = view === 'thief' ? 'rgba(0,255,0,0.04)' : 'rgba(0,100,255,0.04)';
+  ctx.strokeRect(px, py, TILE, TILE);
+
+  ctx.font = '12px Courier New';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const cx = px + TILE/2, cy = py + TILE/2;
+
+  switch(tile) {
+    case '#':
+      ctx.fillStyle = view === 'thief' ? '#143314' : '#141433';
+      ctx.fillRect(px+1, py+1, TILE-2, TILE-2);
+      break;
+    case 'D':
+      ctx.fillStyle = '#ff8800';
+      ctx.fillText('D', cx, cy);
+      break;
+    case 'L':
+      ctx.fillStyle = '#ffaa00';
+      ctx.fillText('L', cx, cy);
+      break;
+    case '*':
+      ctx.fillStyle = '#ffff00';
+      ctx.fillText('*', cx, cy);
+      break;
+    case 'C': {
+      const cam = state.cameras.find(c => c.x === x && c.y === y);
+      ctx.fillStyle = cam && cam.active ? '#ff0000' : '#333';
+      ctx.fillText('C', cx, cy);
+      break;
+    }
+    case '^':
+      ctx.fillStyle = '#00ffff';
+      ctx.fillText('^', cx, cy);
+      break;
+    case 'A':
+      ctx.fillStyle = '#ff00ff';
+      ctx.fillText('A', cx, cy);
+      break;
+    case '>':
+      ctx.fillStyle = state.exitOpen ? '#00ff00' : '#444';
+      ctx.fillText('>', cx, cy);
+      break;
+  }
+}
+
+function drawGuard(guard, offsetX, offsetY, view) {
+  const px = offsetX + guard.x * TILE;
+  const py = offsetY + guard.y * TILE;
+  ctx.font = 'bold 13px Courier New';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = guard.frozen ? '#666666' : '#ff3333';
+  ctx.fillText('G', px + TILE/2, py + TILE/2);
+
+  // Vision cone
+  if (!guard.frozen && view === 'drone') {
+    const dirVecs = [{x:0,y:-1},{x:1,y:0},{x:0,y:1},{x:-1,y:0}];
+    const dv = dirVecs[guard.dir];
+    ctx.fillStyle = 'rgba(255,0,0,0.08)';
+    for (let i = 1; i <= 3; i++) {
+      const vx = guard.x + dv.x * i;
+      const vy = guard.y + dv.y * i;
+      ctx.fillRect(offsetX + vx * TILE, offsetY + vy * TILE, TILE, TILE);
+    }
+  }
+}
+
+function drawView(state, view, offsetX) {
+  // Clip to view
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(offsetX, 0, VIEW_W, VIEW_H);
+  ctx.clip();
+
+  // Background
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(offsetX, 0, VIEW_W, VIEW_H);
+
+  const mapPixelW = state.mapWidth * TILE;
+  const mapPixelH = state.mapHeight * TILE;
+
+  let camX, camY;
+  if (view === 'thief') {
+    // Center on thief
+    camX = state.thief.x * TILE + TILE/2 - VIEW_W/2;
+    camY = state.thief.y * TILE + TILE/2 - VIEW_H/2;
+  } else {
+    // Center on map (or scroll if map is bigger)
+    camX = mapPixelW/2 - VIEW_W/2;
+    camY = mapPixelH/2 - VIEW_H/2;
+  }
+
+  // Clamp camera
+  camX = Math.max(0, Math.min(mapPixelW - VIEW_W, camX));
+  camY = Math.max(0, Math.min(mapPixelH - VIEW_H, camY));
+
+  const drawOffX = offsetX - camX;
+  const drawOffY = -camY;
+
+  // Determine visible tile range
+  const startTX = Math.max(0, Math.floor(camX / TILE));
+  const startTY = Math.max(0, Math.floor(camY / TILE));
+  const endTX = Math.min(state.mapWidth - 1, Math.ceil((camX + VIEW_W) / TILE));
+  const endTY = Math.min(state.mapHeight - 1, Math.ceil((camY + VIEW_H) / TILE));
+
+  const thiefVision = 4;
+
+  for (let y = startTY; y <= endTY; y++) {
+    for (let x = startTX; x <= endTX; x++) {
+      if (view === 'thief') {
+        const dist = Math.abs(x - state.thief.x) + Math.abs(y - state.thief.y);
+        if (dist > thiefVision) {
+          // Fog of war
+          const px = drawOffX + x * TILE;
+          const py = drawOffY + y * TILE;
+          ctx.fillStyle = '#050a05';
+          ctx.fillRect(px, py, TILE, TILE);
+          continue;
+        }
+      }
+      drawTile(x, y, state.map[y][x], drawOffX, drawOffY, view, state);
+    }
+  }
+
+  // Draw guards
+  for (const guard of state.guards) {
+    if (view === 'thief') {
+      const dist = Math.abs(guard.x - state.thief.x) + Math.abs(guard.y - state.thief.y);
+      if (dist > thiefVision) continue;
+    }
+    drawGuard(guard, drawOffX, drawOffY, view);
+  }
+
+  // Draw thief
+  if (view === 'thief' || view === 'drone') {
+    const px = drawOffX + state.thief.x * TILE;
+    const py = drawOffY + state.thief.y * TILE;
+    ctx.font = 'bold 14px Courier New';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // Blink when invulnerable
+    if (state.thief.invulnTimer <= 0 || Math.floor(state.thief.invulnTimer / 100) % 2 === 0) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText('@', px + TILE/2, py + TILE/2);
+    }
+  }
+
+  // Draw drone cursor (only in drone view)
+  if (view === 'drone') {
+    const px = drawOffX + state.drone.x * TILE;
+    const py = drawOffY + state.drone.y * TILE;
+    ctx.strokeStyle = state.drone.battery > 0 ? '#33aaff' : '#333';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(px - 1, py - 1, TILE + 2, TILE + 2);
+    // Crosshair
+    ctx.beginPath();
+    ctx.moveTo(px + TILE/2, py - 3);
+    ctx.lineTo(px + TILE/2, py + TILE + 3);
+    ctx.moveTo(px - 3, py + TILE/2);
+    ctx.lineTo(px + TILE + 3, py + TILE/2);
+    ctx.strokeStyle = 'rgba(51,170,255,0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Scanline effect
+  ctx.fillStyle = view === 'thief' ? 'rgba(0,255,0,0.015)' : 'rgba(0,100,255,0.015)';
+  for (let sy = 0; sy < VIEW_H; sy += 3) {
+    ctx.fillRect(offsetX, sy, VIEW_W, 1);
+  }
+
+  // View label
+  ctx.font = '10px Courier New';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = view === 'thief' ? 'rgba(0,255,0,0.3)' : 'rgba(0,100,255,0.3)';
+  ctx.fillText(view === 'thief' ? '[ THIEF CAM ]' : '[ DRONE FEED ]', offsetX + 8, 14);
+
+  // Alarm flash
+  if (state.alarmActive) {
+    const flash = Math.sin(Date.now() / 100) * 0.5 + 0.5;
+    ctx.fillStyle = `rgba(255,0,0,${flash * 0.08})`;
+    ctx.fillRect(offsetX, 0, VIEW_W, VIEW_H);
+  }
+
+  // Divider line
+  if (view === 'thief') {
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(offsetX + VIEW_W, 0);
+    ctx.lineTo(offsetX + VIEW_W, VIEW_H);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function render(state) {
+  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+  drawView(state, 'thief', 0);
+  drawView(state, 'drone', VIEW_W);
+
+  // UI panels
+  const tp = document.getElementById('thiefPanel');
+  const hpPct = (state.thief.hp / state.thief.maxHp) * 100;
+  const hpColor = state.thief.hp > 1 ? '#33ff33' : '#ff3333';
+  tp.innerHTML = `
+    <b>THIEF</b> &nbsp; HP: <span class="bar-bg"><span class="bar-fill" style="width:${hpPct}%;background:${hpColor}"></span></span> ${state.thief.hp}/${state.thief.maxHp}<br>
+    Loot: ${state.primaryLootCollected}/${state.primaryLootTotal} primary | ${state.bonusLootCollected} bonus<br>
+    ${state.thief.picking ? `Picking lock: ${Math.ceil(state.thief.pickTimer/1000)}s` : state.thief.spotted ? '<span style="color:#ff3333">!! SPOTTED !!</span>' : 'Status: Ready'}
+  `;
+
+  const dp = document.getElementById('dronePanel');
+  const batPct = (state.drone.battery / state.drone.maxBattery) * 100;
+  const batColor = state.drone.battery > 25 ? '#33aaff' : '#ff8800';
+  dp.innerHTML = `
+    <b>DRONE</b> &nbsp; Battery: <span class="bar-bg"><span class="bar-fill" style="width:${batPct}%;background:${batColor}"></span></span> ${state.drone.battery}%<br>
+    Hacks: ${state.drone.hacks} | ${state.drone.charging ? '<span style="color:#00ffff">CHARGING...</span>' : state.drone.battery <= 0 ? '<span style="color:#ff3333">NO POWER</span>' : 'Online'}<br>
+    Guards frozen: ${state.guards.filter(g => g.frozen).length} | Cameras: ${state.cameras.filter(c => c.active).length} active
+  `;
+
+  const cp = document.getElementById('centerPanel');
+  const elapsed = Math.floor(state.timer / 1000);
+  const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
+  const secs = (elapsed % 60).toString().padStart(2, '0');
+  cp.innerHTML = `
+    <b>LEVEL ${state.level}</b><br>
+    Time: ${mins}:${secs}<br>
+    ${state.alarmActive ? `<span style="color:#ff3333">ALARM: ${Math.ceil(state.alarmTimer/1000)}s</span>` : state.exitOpen ? '<span style="color:#33ff33">EXIT OPEN</span>' : `Loot: ${state.primaryLootCollected}/${state.primaryLootTotal}`}
+  `;
+}
+
+// ============================================================
+// INPUT HANDLING
+// ============================================================
+const keys = {};
+const keyTimers = {};
+const MOVE_DELAY = 150;
+
+window.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' ','e','E'].includes(e.key)) {
+    e.preventDefault();
+  }
+});
+window.addEventListener('keyup', e => {
+  keys[e.key] = false;
+  keyTimers[e.key] = 0;
+  if (e.key === 'e' || e.key === 'E') {
+    if (gameState && gameState.thief.picking) {
+      gameState.thief.picking = false;
+      gameState.thief.pickTimer = 0;
+      gameState.thief.pickTarget = null;
+      gameState.thief.action = 'Idle';
+    }
+  }
+});
+
+function handleInput(state, dt) {
+  // Thief movement (WASD)
+  const thiefMoves = [
+    { keys: ['w','W'], dx: 0, dy: -1 },
+    { keys: ['s','S'], dx: 0, dy: 1 },
+    { keys: ['a','A'], dx: -1, dy: 0 },
+    { keys: ['d','D'], dx: 1, dy: 0 },
+  ];
+
+  for (const m of thiefMoves) {
+    const held = m.keys.some(k => keys[k]);
+    const timerKey = m.keys[0];
+    if (held) {
+      keyTimers[timerKey] = (keyTimers[timerKey] || 0) + dt;
+      if (keyTimers[timerKey] >= MOVE_DELAY || !keyTimers[timerKey + '_moved']) {
+        if (keyTimers[timerKey] >= MOVE_DELAY) keyTimers[timerKey] = 0;
+        keyTimers[timerKey + '_moved'] = true;
+        moveThief(state, m.dx, m.dy);
+      }
+    } else {
+      keyTimers[timerKey] = 0;
+      keyTimers[timerKey + '_moved'] = false;
+    }
+  }
+
+  // Lock picking (hold E)
+  if (keys['e'] || keys['E']) {
+    if (!state.thief.picking) {
+      startPickLock(state);
+    }
+  }
+
+  // Drone movement (Arrow keys)
+  const droneMoves = [
+    { key: 'ArrowUp', dx: 0, dy: -1 },
+    { key: 'ArrowDown', dx: 0, dy: 1 },
+    { key: 'ArrowLeft', dx: -1, dy: 0 },
+    { key: 'ArrowRight', dx: 1, dy: 0 },
+  ];
+
+  for (const m of droneMoves) {
+    if (keys[m.key]) {
+      keyTimers[m.key] = (keyTimers[m.key] || 0) + dt;
+      if (keyTimers[m.key] >= MOVE_DELAY || !keyTimers[m.key + '_moved']) {
+        if (keyTimers[m.key] >= MOVE_DELAY) keyTimers[m.key] = 0;
+        keyTimers[m.key + '_moved'] = true;
+        const nx = state.drone.x + m.dx;
+        const ny = state.drone.y + m.dy;
+        if (nx >= 0 && nx < state.mapWidth && ny >= 0 && ny < state.mapHeight) {
+          state.drone.x = nx;
+          state.drone.y = ny;
+        }
+      }
+    } else {
+      keyTimers[m.key] = 0;
+      keyTimers[m.key + '_moved'] = false;
+    }
+  }
+
+  // Drone hack (Space)
+  if (keys[' ']) {
+    if (!keyTimers['space_used']) {
+      keyTimers['space_used'] = true;
+      droneHack(state);
+    }
+  } else {
+    keyTimers['space_used'] = false;
+  }
+
+  return state;
+}
+
+// ============================================================
+// MAIN GAME LOOP
+// ============================================================
+let gameState = null;
+let currentLevel = 1;
+let totalScore = 0;
+let running = false;
+let lastTime = 0;
+
+function gameLoop(time) {
+  if (!running) return;
+  const dt = lastTime ? Math.min(time - lastTime, 50) : 16;
+  lastTime = time;
+
+  if (gameState && !gameState.gameOver && !gameState.gameWon) {
+    gameState.timer += dt;
+    handleInput(gameState, dt);
+    updatePickLock(gameState, dt);
+    updateGuards(gameState, dt);
+    updateAlarm(gameState, dt);
+    updateDroneCharge(gameState, dt);
+    updateInvuln(gameState, dt);
+
+    // Periodic alarm sound
+    if (gameState.alarmActive && Math.floor(gameState.timer / 500) % 2 === 0 && Math.floor((gameState.timer - dt) / 500) % 2 !== 0) {
+      Audio.alarmSound();
+    }
+  }
+
+  if (gameState) {
+    render(gameState);
+
+    if (gameState.gameOver) {
+      document.getElementById('gameOver').style.display = 'flex';
+      document.getElementById('goScore').textContent = `Score: ${totalScore + gameState.score}`;
+      running = false;
+      return;
+    }
+
+    if (gameState.gameWon) {
+      totalScore += gameState.score;
+      document.getElementById('winScreen').style.display = 'flex';
+      document.getElementById('winLevel').textContent = `Level ${gameState.level} Complete!`;
+      document.getElementById('winScore').textContent = `Level Score: ${gameState.score} | Total: ${totalScore}`;
+      document.getElementById('winBonus').textContent = !gameState.alertTriggered ? 'No Alert Bonus: +2000!' : '';
+      if (currentLevel >= 3) {
+        document.getElementById('btnNext').textContent = '[ HEIST COMPLETE - PRESS ENTER ]';
+      }
+      running = false;
+      return;
+    }
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+function startLevel(level) {
+  currentLevel = level;
+  gameState = createGameState(level);
+  document.getElementById('startScreen').style.display = 'none';
+  document.getElementById('gameOver').style.display = 'none';
+  document.getElementById('winScreen').style.display = 'none';
+  running = true;
+  lastTime = 0;
+  requestAnimationFrame(gameLoop);
+}
+
+// ============================================================
+// MENU HANDLING
+// ============================================================
+document.getElementById('btnStart').addEventListener('click', () => {
+  totalScore = 0;
+  startLevel(1);
+});
+
+document.getElementById('btnRetry').addEventListener('click', () => {
+  totalScore = 0;
+  currentLevel = 1;
+  startLevel(1);
+});
+
+document.getElementById('btnNext').addEventListener('click', () => {
+  if (currentLevel >= 3) {
+    // Game complete, restart
+    totalScore = 0;
+    currentLevel = 1;
+    document.getElementById('winScreen').style.display = 'none';
+    document.getElementById('startScreen').style.display = 'flex';
+  } else {
+    startLevel(currentLevel + 1);
+  }
+});
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const start = document.getElementById('startScreen');
+    const over = document.getElementById('gameOver');
+    const win = document.getElementById('winScreen');
+    if (start.style.display !== 'none' && start.style.display !== '') {
+      totalScore = 0;
+      startLevel(1);
+    } else if (over.style.display === 'flex') {
+      totalScore = 0;
+      currentLevel = 1;
+      startLevel(1);
+    } else if (win.style.display === 'flex') {
+      if (currentLevel >= 3) {
+        totalScore = 0;
+        currentLevel = 1;
+        win.style.display = 'none';
+        start.style.display = 'flex';
+      } else {
+        startLevel(currentLevel + 1);
+      }
+    }
+  }
+});
+</script>
+</body>
+</html>
