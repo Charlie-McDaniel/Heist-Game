@@ -2,30 +2,59 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <title>HEIST // Co-Op Terminal Heist</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
   background: #0a0a0a; display: flex; flex-direction: column; align-items: center;
-  justify-content: center; height: 100vh; font-family: 'Courier New', monospace;
+  justify-content: center; height: 100vh; height: 100dvh; font-family: 'Courier New', monospace;
   color: #33ff33; overflow: hidden; user-select: none;
+  position: fixed; width: 100%; top: 0; left: 0;
+  touch-action: manipulation; overscroll-behavior: none;
+  -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
 }
 canvas { display: block; image-rendering: pixelated; }
 #ui { display: flex; width: 1200px; height: 80px; margin-top: 4px; gap: 4px; }
-.panel { flex: 1; background: #111; border: 1px solid #222; padding: 8px; font-size: 12px; line-height: 1.6; }
+.panel { flex: 1; background: #111; border: 1px solid #222; padding: 8px; font-size: 11px; line-height: 1.5; }
 .panel.thief { border-color: #1a3a1a; color: #33ff33; }
 .panel.center { text-align: center; border-color: #333; color: #aaa; }
 .panel.drone { border-color: #1a1a3a; color: #33aaff; }
-.bar-bg { display: inline-block; width: 80px; height: 10px; background: #222; vertical-align: middle; }
+.bar-bg { display: inline-block; width: 70px; height: 8px; background: #222; vertical-align: middle; }
 .bar-fill { height: 100%; transition: width 0.2s; }
+
+/* Abilities bar */
+#abilitiesBar {
+  width: 1200px; height: 28px; display: none; margin-top: 2px;
+  background: #0d0d0d; border: 1px solid #1a1a1a; padding: 3px 8px;
+  font-size: 11px; color: #888;
+}
+.ability { display: inline-block; margin-right: 16px; }
+.ability .key { color: #ffcc00; font-weight: bold; }
+.ability .charges { color: #33ff33; }
+.ability .cooldown { color: #ff6600; }
+.ability .ready { color: #33ff33; }
+.ability .empty { color: #ff3333; }
+
+/* Objectives bar */
+#objectivesBar {
+  width: 1200px; height: 24px; display: none; margin-top: 2px;
+  background: #0d0d0d; border: 1px solid #1a1a1a; padding: 2px 8px;
+  font-size: 10px; color: #888; overflow: hidden;
+}
+.obj { display: inline-block; margin-right: 20px; }
+.obj.done { color: #33ff33; text-decoration: line-through; }
+.obj.pending { color: #ffcc00; }
 
 /* Chat bar */
 #chatArea {
-  width: 1200px; height: 100px; display: flex; flex-direction: column;
-  margin-top: 4px; background: #0d0d0d; border: 1px solid #1a1a1a;
+  width: 1200px; height: 80px; display: flex; flex-direction: column;
+  margin-top: 2px; background: #0d0d0d; border: 1px solid #1a1a1a;
 }
 #chatLog {
-  flex: 1; overflow-y: auto; padding: 4px 8px; font-size: 11px; color: #666;
+  flex: 1; overflow-y: auto; padding: 2px 8px; font-size: 10px; color: #666;
   scrollbar-width: thin; scrollbar-color: #333 #111;
 }
 #chatLog .thief-msg { color: #33ff33; }
@@ -35,13 +64,13 @@ canvas { display: block; image-rendering: pixelated; }
   display: flex; border-top: 1px solid #1a1a1a;
 }
 #chatInput input {
-  flex: 1; background: #111; border: none; color: #33ff33; padding: 6px 8px;
-  font-family: 'Courier New', monospace; font-size: 12px; outline: none;
+  flex: 1; background: #111; border: none; color: #33ff33; padding: 4px 8px;
+  font-family: 'Courier New', monospace; font-size: 11px; outline: none;
 }
 #chatInput input::placeholder { color: #333; }
 #chatInput button {
-  background: #1a1a1a; border: none; color: #33ff33; padding: 6px 12px;
-  font-family: 'Courier New', monospace; font-size: 12px; cursor: pointer;
+  background: #1a1a1a; border: none; color: #33ff33; padding: 4px 12px;
+  font-family: 'Courier New', monospace; font-size: 11px; cursor: pointer;
 }
 #chatInput button:hover { background: #222; }
 
@@ -57,6 +86,7 @@ canvas { display: block; image-rendering: pixelated; }
 #gameOverScreen { background: rgba(10,0,0,0.9); display: none; }
 #winScreen { background: rgba(0,10,0,0.9); display: none; }
 #completeScreen { background: rgba(0,10,0,0.95); display: none; }
+#upgradeScreen { background: rgba(5,5,15,0.95); display: none; }
 
 .overlay h1 { font-size: 48px; text-shadow: 0 0 20px currentColor; margin-bottom: 10px; }
 .overlay h2 { font-size: 28px; margin-bottom: 15px; }
@@ -73,6 +103,9 @@ canvas { display: block; image-rendering: pixelated; }
 .btn-blue:hover { background: #1a1a3a; }
 .btn-red { border: 2px solid #ff3333; color: #ff3333; }
 .btn-red:hover { background: #3a1a1a; }
+.btn-yellow { border: 2px solid #ffcc00; color: #ffcc00; }
+.btn-yellow:hover { background: #3a3a1a; }
+.btn-sm { font-size: 12px; padding: 6px 16px; margin: 4px; }
 
 .room-code {
   font-size: 64px; color: #33ff33; letter-spacing: 12px;
@@ -87,12 +120,12 @@ input.code-input {
 input.code-input:focus { border-color: #66ccff; }
 .error-msg { color: #ff3333; font-size: 14px; min-height: 20px; margin: 8px 0; }
 
-.controls-row { display: flex; gap: 60px; margin: 20px 0; }
+.controls-row { display: flex; gap: 40px; margin: 15px 0; flex-wrap: wrap; justify-content: center; }
 .ctrl-col { text-align: center; }
-.ctrl-col h3 { margin-bottom: 8px; font-size: 16px; }
+.ctrl-col h3 { margin-bottom: 6px; font-size: 14px; }
 .ctrl-col.t { color: #33ff33; }
 .ctrl-col.d { color: #33aaff; }
-.ctrl-col p { color: #666; font-size: 12px; line-height: 1.8; }
+.ctrl-col p { color: #666; font-size: 11px; line-height: 1.7; }
 
 .role-badge {
   display: inline-block; padding: 4px 16px; font-size: 14px; margin: 10px 0;
@@ -100,6 +133,162 @@ input.code-input:focus { border-color: #66ccff; }
 }
 .role-badge.thief { border-color: #33ff33; color: #33ff33; }
 .role-badge.drone { border-color: #33aaff; color: #33aaff; }
+
+/* Upgrade shop */
+.upgrade-grid {
+  display: flex; gap: 20px; margin: 15px 0; flex-wrap: wrap; justify-content: center;
+}
+.upgrade-col { text-align: center; min-width: 200px; }
+.upgrade-col h3 { margin-bottom: 8px; font-size: 14px; }
+.upgrade-item {
+  display: block; width: 100%; margin: 4px 0; padding: 6px 10px;
+  background: #111; border: 1px solid #333; font-family: 'Courier New', monospace;
+  font-size: 11px; color: #aaa; cursor: pointer; text-align: left;
+}
+.upgrade-item:hover:not(.purchased):not(.too-expensive) { border-color: #ffcc00; color: #ffcc00; }
+.upgrade-item.purchased { border-color: #1a3a1a; color: #335533; cursor: default; }
+.upgrade-item.too-expensive { color: #553333; cursor: default; }
+.upgrade-cost { float: right; color: #ffcc00; }
+.upgrade-item.purchased .upgrade-cost { color: #335533; }
+.upgrade-item.too-expensive .upgrade-cost { color: #553333; }
+
+/* Mobile responsive — tablets */
+@media (max-width: 1220px) {
+  body { justify-content: flex-start; padding-top: 4px; }
+  #ui, #abilitiesBar, #objectivesBar, #chatArea { width: 100vw; }
+  .panel { font-size: 9px; padding: 4px; }
+}
+
+/* Mobile responsive — phones */
+@media (max-width: 768px) {
+  body { justify-content: flex-start; padding-top: 0; }
+
+  /* Lobby */
+  .overlay h1 { font-size: 28px; }
+  .overlay h2 { font-size: 20px; }
+  .overlay .sub { font-size: 12px; margin-bottom: 15px; }
+  .overlay p { font-size: 12px; }
+  .overlay { padding: 10px; overflow-y: auto; }
+  .controls-row { gap: 16px; }
+  .ctrl-col h3 { font-size: 12px; }
+  .ctrl-col p { font-size: 9px; line-height: 1.5; }
+  .btn { font-size: 14px; padding: 10px 20px; margin: 5px; }
+  .room-code { font-size: 40px; letter-spacing: 8px; margin: 12px 0; }
+  input.code-input { font-size: 28px; width: 160px; letter-spacing: 8px; padding: 8px; }
+
+  /* Game UI */
+  #ui { flex-direction: column; height: auto; gap: 1px; width: 100vw; }
+  .panel { font-size: 8px; padding: 3px 6px; line-height: 1.3; min-height: 0; }
+  .bar-bg { width: 50px; height: 6px; }
+  #abilitiesBar { display: none !important; } /* abilities shown on touch buttons instead */
+  #objectivesBar { width: 100vw; height: 18px; font-size: 8px; padding: 1px 6px; }
+  #chatArea { width: 100vw; height: 0; overflow: hidden; transition: height 0.2s; }
+  #chatArea.mobile-open { height: 80px; }
+
+  /* Overlays */
+  .upgrade-grid { flex-direction: column; gap: 10px; }
+  .upgrade-col { min-width: 0; width: 100%; }
+  .upgrade-item { font-size: 10px; padding: 5px 8px; }
+
+  /* Touch game area — prevent scrolling */
+  canvas { touch-action: none; }
+}
+
+/* Landscape mobile */
+@media (max-height: 500px) and (max-width: 900px) {
+  #ui { display: none !important; }
+  #abilitiesBar { display: none !important; }
+  #objectivesBar { display: none !important; }
+  #chatArea { display: none !important; }
+  #touchControls.active { height: 100vh; height: 100dvh; padding: 8px 12px; }
+}
+
+/* Chat toggle (mobile only) */
+#chatToggle {
+  display: none; background: #111; border: 1px solid #1a1a1a; color: #555;
+  font-family: 'Courier New', monospace; font-size: 9px; padding: 2px 8px;
+  cursor: pointer; width: 100vw; text-align: center;
+}
+#chatToggle:active { background: #1a1a1a; color: #888; }
+@media (max-width: 768px) {
+  #chatToggle.visible { display: block; }
+}
+
+/* Role switch tabs (local co-op on touch) */
+#roleSwitch {
+  display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 22;
+  height: 32px; background: #0a0a0a; border-bottom: 1px solid #222;
+}
+#roleSwitch.active { display: flex; }
+.role-tab {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  font-family: 'Courier New', monospace; font-size: 11px; cursor: pointer;
+  border: none; background: #111; color: #555;
+}
+.role-tab.thief-tab { border-right: 1px solid #222; }
+.role-tab.selected.thief-tab { background: #0d1a0d; color: #33ff33; border-bottom: 2px solid #33ff33; }
+.role-tab.selected.drone-tab { background: #0d0d1a; color: #33aaff; border-bottom: 2px solid #33aaff; }
+
+/* Orientation banner */
+#orientBanner {
+  display: none; position: fixed; top: 0; left: 0; width: 100%; z-index: 30;
+  background: rgba(255,204,0,0.9); color: #000; text-align: center;
+  font-family: 'Courier New', monospace; font-size: 11px; padding: 4px;
+}
+
+/* Touch controls */
+#touchControls {
+  display: none; position: fixed; bottom: 0; left: 0; width: 100%; height: 180px;
+  z-index: 20; pointer-events: none;
+}
+#touchControls.active { display: flex; justify-content: space-between; align-items: flex-end; padding: 10px 16px; }
+
+.touch-dpad {
+  width: 150px; height: 150px; position: relative; pointer-events: auto;
+}
+.touch-dpad-btn {
+  position: absolute; width: 48px; height: 48px; background: rgba(51,255,51,0.15);
+  border: 2px solid rgba(51,255,51,0.35); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(51,255,51,0.7); font-size: 22px; font-family: 'Courier New', monospace;
+  touch-action: none;
+}
+.touch-dpad-btn:active { background: rgba(51,255,51,0.4); }
+.touch-dpad-btn.up { top: 0; left: 51px; }
+.touch-dpad-btn.down { bottom: 0; left: 51px; }
+.touch-dpad-btn.left { top: 51px; left: 0; }
+.touch-dpad-btn.right { top: 51px; right: 0; }
+.drone-view .touch-dpad-btn { background: rgba(51,170,255,0.15); border-color: rgba(51,170,255,0.35); color: rgba(51,170,255,0.7); }
+.drone-view .touch-dpad-btn:active { background: rgba(51,170,255,0.4); }
+
+.touch-abilities {
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-end; pointer-events: auto;
+}
+.touch-btn {
+  width: 60px; height: 60px; border-radius: 50%; background: rgba(51,255,51,0.12);
+  border: 2px solid rgba(51,255,51,0.4); display: flex; align-items: center;
+  justify-content: center; color: rgba(51,255,51,0.8); font-size: 10px;
+  font-family: 'Courier New', monospace; text-align: center; line-height: 1.1;
+  touch-action: none;
+}
+.touch-btn:active { background: rgba(51,255,51,0.4); }
+.touch-btn.blue { background: rgba(51,170,255,0.12); border-color: rgba(51,170,255,0.4); color: rgba(51,170,255,0.8); }
+.touch-btn.blue:active { background: rgba(51,170,255,0.4); }
+.touch-btn.yellow { background: rgba(255,204,0,0.12); border-color: rgba(255,204,0,0.4); color: rgba(255,204,0,0.8); }
+.touch-btn.yellow:active { background: rgba(255,204,0,0.4); }
+.touch-btn.red { background: rgba(255,50,50,0.12); border-color: rgba(255,50,50,0.4); color: rgba(255,50,50,0.8); }
+.touch-btn.red:active { background: rgba(255,50,50,0.4); }
+.touch-row { display: flex; gap: 8px; }
+
+/* Music toggle */
+#musicToggle {
+  position: fixed; top: 8px; right: 8px; z-index: 25;
+  background: rgba(20,20,20,0.8); border: 1px solid #333; color: #666;
+  font-family: 'Courier New', monospace; font-size: 11px; padding: 4px 10px;
+  cursor: pointer; border-radius: 3px;
+}
+#musicToggle:hover { border-color: #555; color: #aaa; }
+#musicToggle.on { border-color: #33ff33; color: #33ff33; }
 </style>
 </head>
 <body>
@@ -107,20 +296,21 @@ input.code-input:focus { border-color: #66ccff; }
 <!-- LOBBY SCREEN -->
 <div class="overlay" id="lobbyScreen">
   <h1 style="color:#33ff33">// HEIST //</h1>
-  <p class="sub">Online Co-Op Terminal Heist</p>
+  <p class="sub">Online Co-Op Terminal Heist — 5 Levels</p>
   <div class="controls-row">
     <div class="ctrl-col t">
       <h3>THIEF (Host)</h3>
-      <p>WASD — Move<br>E (hold) — Pick Lock<br>Collect loot, reach exit</p>
+      <p>WASD — Move<br>E (hold) — Pick Lock<br>Shift — Sprint<br>Q — Throw Noise Maker<br>F — Smoke Bomb<br>Collect loot, reach exit</p>
     </div>
     <div class="ctrl-col d">
       <h3>DRONE (Guest)</h3>
-      <p>Arrow Keys — Move Cursor<br>Space — Hack Target<br>Disable cameras, open doors</p>
+      <p>Arrow Keys — Move Cursor<br>Space — Hack Target<br>R — EMP Blast<br>T — Deploy Decoy<br>P — Ping Location<br>Guide the thief, disable security</p>
     </div>
   </div>
   <div>
-    <button class="btn btn-green" id="btnHost">[ HOST GAME ]</button>
-    <button class="btn btn-blue" id="btnJoinShow">[ JOIN GAME ]</button>
+    <button class="btn btn-green" id="btnHost">[ HOST ONLINE ]</button>
+    <button class="btn btn-blue" id="btnJoinShow">[ JOIN ONLINE ]</button>
+    <button class="btn btn-yellow" id="btnLocal">[ LOCAL CO-OP ]</button>
   </div>
   <div id="joinArea" style="display:none; margin-top: 20px; text-align: center;">
     <p style="color:#33aaff; margin-bottom:10px;">Enter room code:</p>
@@ -162,13 +352,32 @@ input.code-input:focus { border-color: #66ccff; }
   <p id="winLevel" style="color:#1a8a1a"></p>
   <p id="winScore" style="color:#1a8a1a"></p>
   <p id="winBonus" style="color:#ffcc00"></p>
+  <div id="winObjectives" style="margin:8px 0;font-size:12px;"></div>
+  <div id="winUpgradeArea"></div>
   <div id="winNext"></div>
+</div>
+
+<!-- UPGRADE SHOP (between levels) -->
+<div class="overlay" id="upgradeScreen">
+  <h2 style="color:#ffcc00">// UPGRADE SHOP //</h2>
+  <p id="upgradeScore" style="color:#aaa;margin-bottom:10px;">Available Points: 0</p>
+  <div class="upgrade-grid">
+    <div class="upgrade-col" style="color:#33ff33">
+      <h3>THIEF UPGRADES</h3>
+      <div id="thiefUpgradeList"></div>
+    </div>
+    <div class="upgrade-col" style="color:#33aaff">
+      <h3>DRONE UPGRADES</h3>
+      <div id="droneUpgradeList"></div>
+    </div>
+  </div>
+  <button class="btn btn-green btn-sm" id="btnCloseUpgrades">[ DONE ]</button>
 </div>
 
 <!-- GAME COMPLETE -->
 <div class="overlay" id="completeScreen">
   <h1 style="color:#33ff33">// HEIST COMPLETE //</h1>
-  <p style="color:#1a8a1a; font-size: 18px;">All 3 levels cleared!</p>
+  <p style="color:#1a8a1a; font-size: 18px;">All 5 levels cleared!</p>
   <p id="finalScore" style="color:#33ff33; font-size: 24px; margin: 20px 0;"></p>
   <button class="btn btn-green" onclick="location.reload()">[ RETURN TO LOBBY ]</button>
 </div>
@@ -179,6 +388,9 @@ input.code-input:focus { border-color: #66ccff; }
   <div class="panel center" id="centerPanel"></div>
   <div class="panel drone" id="dronePanel"></div>
 </div>
+<div id="abilitiesBar"></div>
+<div id="objectivesBar"></div>
+<div id="chatToggle">[ CHAT ]</div>
 <div id="chatArea" style="display:none;">
   <div id="chatLog"></div>
   <div id="chatInput">
@@ -187,9 +399,32 @@ input.code-input:focus { border-color: #66ccff; }
   </div>
 </div>
 
+<!-- ROLE SWITCH (local co-op on touch) -->
+<div id="roleSwitch">
+  <button class="role-tab thief-tab selected" data-role="thief">THIEF</button>
+  <button class="role-tab drone-tab" data-role="drone">DRONE</button>
+</div>
+
+<!-- ORIENTATION BANNER -->
+<div id="orientBanner">Rotate to landscape for best experience</div>
+
+<!-- TOUCH CONTROLS (mobile) -->
+<div id="touchControls">
+  <div class="touch-dpad" id="touchDpad">
+    <div class="touch-dpad-btn up" data-dx="0" data-dy="-1">W</div>
+    <div class="touch-dpad-btn down" data-dx="0" data-dy="1">S</div>
+    <div class="touch-dpad-btn left" data-dx="-1" data-dy="0">A</div>
+    <div class="touch-dpad-btn right" data-dx="1" data-dy="0">D</div>
+  </div>
+  <div class="touch-abilities" id="touchAbilities"></div>
+</div>
+
+<!-- MUSIC TOGGLE -->
+<button id="musicToggle">MUSIC: OFF</button>
+
 <script>
 // ============================================================
-// AUDIO
+// AUDIO — Enhanced with new sounds
 // ============================================================
 const SFX = (() => {
   let ctx = null;
@@ -209,19 +444,265 @@ const SFX = (() => {
       o.start(); o.stop(c.currentTime + dur);
     } catch(e) {}
   }
+  function noise(dur, vol) {
+    try {
+      const c = getCtx();
+      const bufSize = c.sampleRate * dur;
+      const buf = c.createBuffer(1, bufSize, c.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+      const src = c.createBufferSource();
+      const g = c.createGain();
+      src.buffer = buf;
+      g.gain.value = vol;
+      g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur);
+      src.connect(g); g.connect(c.destination);
+      src.start();
+    } catch(e) {}
+  }
   return {
-    move: () => play(120, 0.08, 'square', 0.06),
-    hack: () => play(800, 0.15, 'sine', 0.08),
+    move: () => play(120, 0.06, 'square', 0.04),
+    hack: () => { play(800, 0.12, 'sine', 0.08); play(1200, 0.08, 'sine', 0.04); },
     alarm: () => { play(400, 0.2, 'sawtooth', 0.12); setTimeout(() => play(600, 0.2, 'sawtooth', 0.12), 200); },
-    hit: () => play(80, 0.3, 'sawtooth', 0.15),
+    hit: () => { play(80, 0.3, 'sawtooth', 0.15); noise(0.1, 0.08); },
     loot: () => { play(600, 0.1, 'sine', 0.1); setTimeout(() => play(900, 0.15, 'sine', 0.1), 100); },
     lock: () => play(200, 0.1, 'triangle', 0.05),
     doorOpen: () => play(500, 0.2, 'sine', 0.08),
     victory: () => { [523,659,784,1047].forEach((f,i) => setTimeout(() => play(f, 0.3, 'sine', 0.1), i*150)); },
     gameOver: () => { [400,300,200,100].forEach((f,i) => setTimeout(() => play(f, 0.4, 'sawtooth', 0.1), i*200)); },
     charge: () => play(1200, 0.05, 'sine', 0.04),
+    sprint: () => { play(300, 0.1, 'square', 0.06); play(400, 0.08, 'square', 0.04); },
+    noise: () => { play(150, 0.3, 'sawtooth', 0.08); setTimeout(() => play(200, 0.2, 'sawtooth', 0.06), 150); },
+    smoke: () => noise(0.3, 0.06),
+    emp: () => { noise(0.15, 0.1); play(100, 0.4, 'sine', 0.12); play(50, 0.5, 'sine', 0.08); },
+    decoy: () => { play(1000, 0.1, 'sine', 0.06); play(800, 0.1, 'sine', 0.04); },
+    ping: () => { play(1500, 0.08, 'sine', 0.06); setTimeout(() => play(1500, 0.08, 'sine', 0.04), 150); },
+    laser: () => play(2000, 0.05, 'sine', 0.03),
+    footstep: () => play(60, 0.04, 'square', 0.02),
   };
 })();
+
+// ============================================================
+// AMBIENT AUDIO — In-game drone hum
+// ============================================================
+const Ambient = (() => {
+  let ctx = null, running = false, nodes = [];
+  function start() {
+    if (running) return;
+    try {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const o1 = ctx.createOscillator();
+      const g1 = ctx.createGain();
+      o1.type = 'sine'; o1.frequency.value = 55;
+      g1.gain.value = 0.015;
+      o1.connect(g1); g1.connect(ctx.destination);
+      o1.start();
+      nodes.push(o1, g1);
+      const o2 = ctx.createOscillator();
+      const g2 = ctx.createGain();
+      o2.type = 'sine'; o2.frequency.value = 4400;
+      g2.gain.value = 0.003;
+      o2.connect(g2); g2.connect(ctx.destination);
+      o2.start();
+      nodes.push(o2, g2);
+      running = true;
+    } catch(e) {}
+  }
+  function stop() {
+    nodes.forEach(n => { try { n.stop ? n.stop() : n.disconnect(); } catch(e) {} });
+    nodes = []; running = false;
+  }
+  return { start, stop };
+})();
+
+// ============================================================
+// MENU MUSIC — Dark cyberpunk procedural soundtrack
+// ============================================================
+const MenuMusic = (() => {
+  let ctx = null, running = false, masterGain = null;
+  let schedulerId = null;
+  let nextBeatTime = 0;
+  const BPM = 85;
+  const BEAT = 60 / BPM;
+  let currentBeat = 0;
+
+  // D minor pentatonic / dark scale: D2=73.4, F2=87.3, G2=98, A2=110, C3=130.8
+  // Bass notes
+  const bassNotes = [73.42, 73.42, 87.31, 73.42, 98.00, 87.31, 73.42, 65.41];
+  // Arp notes (higher octave): D4, F4, A4, C5, D5, A4, F4, C4
+  const arpNotes = [293.66, 349.23, 440.00, 523.25, 587.33, 440.00, 349.23, 261.63];
+  // High melody fragments
+  const melodyNotes = [587.33, 0, 523.25, 0, 440.00, 349.23, 0, 523.25, 587.33, 0, 698.46, 0, 587.33, 523.25, 440.00, 0];
+
+  function ensureCtx() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (!masterGain) {
+      masterGain = ctx.createGain();
+      masterGain.gain.value = 0.5;
+      masterGain.connect(ctx.destination);
+    }
+    return ctx;
+  }
+
+  function playNote(freq, time, dur, type, vol, dest) {
+    if (!freq || freq === 0) return;
+    const c = ctx;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, time);
+    g.gain.setValueAtTime(0.001, time);
+    g.gain.linearRampToValueAtTime(vol, time + 0.02);
+    g.gain.linearRampToValueAtTime(vol * 0.7, time + dur * 0.5);
+    g.gain.exponentialRampToValueAtTime(0.001, time + dur);
+    o.connect(g);
+    g.connect(dest || masterGain);
+    o.start(time);
+    o.stop(time + dur + 0.05);
+  }
+
+  function playKick(time) {
+    const c = ctx;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(120, time);
+    o.frequency.exponentialRampToValueAtTime(30, time + 0.15);
+    g.gain.setValueAtTime(0.2, time);
+    g.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
+    o.connect(g); g.connect(masterGain);
+    o.start(time); o.stop(time + 0.3);
+  }
+
+  function playHihat(time, vol) {
+    const c = ctx;
+    const bufSize = c.sampleRate * 0.05;
+    const buf = c.createBuffer(1, bufSize, c.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+    const src = c.createBufferSource();
+    const g = c.createGain();
+    const hp = c.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = 8000;
+    src.buffer = buf;
+    g.gain.setValueAtTime(vol, time);
+    g.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
+    src.connect(hp); hp.connect(g); g.connect(masterGain);
+    src.start(time);
+  }
+
+  function scheduleBeat() {
+    const c = ensureCtx();
+    const t = nextBeatTime;
+    const beat = currentBeat % 16;
+    const bar = Math.floor(currentBeat / 16);
+
+    // Kick on beats 0, 4, 8, 12 (four-on-floor but slower)
+    if (beat % 4 === 0) playKick(t);
+
+    // Hi-hat on every other 8th note
+    if (beat % 2 === 0) playHihat(t, 0.03);
+    if (beat % 2 === 1) playHihat(t, 0.015);
+
+    // Deep bass — one note per 2 beats
+    if (beat % 2 === 0) {
+      const bassIdx = Math.floor(beat / 2) % bassNotes.length;
+      playNote(bassNotes[bassIdx], t, BEAT * 1.8, 'sawtooth', 0.08, masterGain);
+      // Sub bass
+      playNote(bassNotes[bassIdx] / 2, t, BEAT * 1.8, 'sine', 0.1, masterGain);
+    }
+
+    // Arpeggiated synth — 16th note pattern, every beat
+    const arpIdx = beat % arpNotes.length;
+    if (bar % 2 === 0 || beat >= 8) {
+      playNote(arpNotes[arpIdx], t, BEAT * 0.4, 'square', 0.025, masterGain);
+    }
+
+    // High melody — sparse, every other bar
+    if (bar % 2 === 1) {
+      const melIdx = beat % melodyNotes.length;
+      if (melodyNotes[melIdx] > 0) {
+        playNote(melodyNotes[melIdx], t, BEAT * 0.8, 'sine', 0.03, masterGain);
+      }
+    }
+
+    // Tension riser every 4 bars
+    if (bar % 4 === 3 && beat >= 12) {
+      const riseFreq = 200 + (beat - 12) * 150;
+      playNote(riseFreq, t, BEAT * 0.3, 'sawtooth', 0.02, masterGain);
+    }
+
+    nextBeatTime += BEAT * 0.5; // Schedule in 8th notes
+    currentBeat++;
+  }
+
+  function scheduler() {
+    if (!running) return;
+    const c = ensureCtx();
+    // Schedule ahead by 0.2 seconds
+    while (nextBeatTime < c.currentTime + 0.2) {
+      scheduleBeat();
+    }
+    schedulerId = setTimeout(scheduler, 50);
+  }
+
+  function start() {
+    if (running) return;
+    ensureCtx();
+    if (ctx.state === 'suspended') ctx.resume();
+    running = true;
+    nextBeatTime = ctx.currentTime + 0.1;
+    currentBeat = 0;
+    scheduler();
+    document.getElementById('musicToggle').textContent = 'MUSIC: ON';
+    document.getElementById('musicToggle').classList.add('on');
+  }
+
+  function stop() {
+    running = false;
+    if (schedulerId) { clearTimeout(schedulerId); schedulerId = null; }
+    document.getElementById('musicToggle').textContent = 'MUSIC: OFF';
+    document.getElementById('musicToggle').classList.remove('on');
+  }
+
+  function toggle() {
+    if (running) stop(); else start();
+  }
+
+  function setVolume(v) {
+    if (masterGain) masterGain.gain.value = v;
+  }
+
+  return { start, stop, toggle, setVolume };
+})();
+
+document.getElementById('musicToggle').addEventListener('click', () => MenuMusic.toggle());
+
+// ============================================================
+// SCREEN SHAKE
+// ============================================================
+let shakeX = 0, shakeY = 0;
+let activeShakes = [];
+
+function addShake(intensity, duration) {
+  activeShakes.push({ intensity, duration, elapsed: 0 });
+}
+
+function updateShake(dt) {
+  shakeX = 0; shakeY = 0;
+  for (let i = activeShakes.length - 1; i >= 0; i--) {
+    const s = activeShakes[i];
+    s.elapsed += dt;
+    if (s.elapsed >= s.duration) {
+      activeShakes.splice(i, 1);
+      continue;
+    }
+    const progress = 1 - s.elapsed / s.duration;
+    const amp = s.intensity * progress;
+    shakeX += (Math.random() - 0.5) * amp * 2;
+    shakeY += (Math.random() - 0.5) * amp * 2;
+  }
+}
 
 // ============================================================
 // NETWORKING
@@ -232,7 +713,8 @@ let myRoomCode = null;
 let myPlayerId = null;
 let latestState = null;
 let gameVisible = false;
-let inputThrottle = {};
+let upgradeData = null;
+let isLocalCoop = false;
 
 function wsUrl() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -244,7 +726,6 @@ function connect(onOpen) {
   ws.onopen = () => { if (onOpen) onOpen(); };
   ws.onmessage = (e) => handleMessage(JSON.parse(e.data));
   ws.onclose = () => {
-    // Try to reconnect after 2 seconds
     setTimeout(() => {
       if (myRoomCode && myRole) {
         connect(() => {
@@ -278,8 +759,19 @@ function handleMessage(msg) {
       addChatSystem(`Connected as ${msg.role.toUpperCase()}`);
       break;
 
+    case 'localStarted':
+      myRoomCode = msg.code;
+      myRole = 'local';
+      myPlayerId = msg.playerId;
+      isLocalCoop = true;
+      showGame();
+      Ambient.start();
+      addChatSystem('LOCAL CO-OP — HEIST IS ON');
+      break;
+
     case 'partnerJoined':
       showGame();
+      Ambient.start();
       addChatSystem('DRONE operator connected — HEIST IS ON');
       break;
 
@@ -306,12 +798,18 @@ function handleMessage(msg) {
           if (SFX[s]) SFX[s]();
         }
       }
+      // Screen shake events
+      if (msg.shakeEvents) {
+        for (const se of msg.shakeEvents) {
+          addShake(se.intensity, se.duration);
+        }
+      }
       // Check game over / win
       if (msg.gameOver) {
         showScreen('gameOverScreen');
         document.getElementById('goScore').textContent = `Score: ${msg.score}`;
         const retryDiv = document.getElementById('goRetry');
-        if (myRole === 'thief') {
+        if (myRole === 'thief' || myRole === 'local') {
           retryDiv.innerHTML = '<button class="btn btn-red" onclick="sendRetry()">[ RETRY ]</button>';
         } else {
           retryDiv.innerHTML = '<p style="color:#666">Waiting for host to retry...</p>';
@@ -321,8 +819,24 @@ function handleMessage(msg) {
         document.getElementById('winLevel').textContent = `Level ${msg.level} Complete!`;
         document.getElementById('winScore').textContent = `Level Score: ${msg.score}`;
         document.getElementById('winBonus').textContent = !msg.alertTriggered ? 'No Alert Bonus: +2000!' : '';
+        // Show objectives
+        const objDiv = document.getElementById('winObjectives');
+        let objHtml = '';
+        if (msg.objectives) {
+          for (const obj of msg.objectives) {
+            objHtml += `<span style="color:${obj.completed ? '#33ff33' : '#ff3333'}">${obj.completed ? '[+1000]' : '[FAILED]'} ${obj.desc}</span><br>`;
+          }
+        }
+        objDiv.innerHTML = objHtml;
+        // Upgrade button
+        const upgradeArea = document.getElementById('winUpgradeArea');
+        if (msg.level < (msg.maxLevels || 5)) {
+          upgradeArea.innerHTML = '<button class="btn btn-yellow btn-sm" onclick="showUpgradeShop()">[ UPGRADE SHOP ]</button>';
+        } else {
+          upgradeArea.innerHTML = '';
+        }
         const nextDiv = document.getElementById('winNext');
-        if (myRole === 'thief') {
+        if (myRole === 'thief' || myRole === 'local') {
           nextDiv.innerHTML = '<button class="btn btn-green" onclick="sendNextLevel()">[ NEXT LEVEL ]</button>';
         } else {
           nextDiv.innerHTML = '<p style="color:#666">Waiting for host to continue...</p>';
@@ -338,6 +852,11 @@ function handleMessage(msg) {
       addChatMessage(msg.from, msg.text);
       break;
 
+    case 'upgrades':
+      upgradeData = msg;
+      renderUpgradeShop();
+      break;
+
     case 'gameComplete':
       showScreen('completeScreen');
       document.getElementById('finalScore').textContent = `Total Score: ${msg.totalScore}`;
@@ -348,15 +867,50 @@ function handleMessage(msg) {
 function sendRetry() { send({ type: 'retry' }); }
 function sendNextLevel() { send({ type: 'nextLevel' }); }
 
+function showUpgradeShop() {
+  send({ type: 'upgrade', upgradeId: '__query__', upgradeRole: 'thief' }); // Triggers upgrade state broadcast
+  document.getElementById('upgradeScreen').style.display = 'flex';
+}
+
+function renderUpgradeShop() {
+  if (!upgradeData) return;
+  document.getElementById('upgradeScore').textContent = `Available Points: ${upgradeData.score}`;
+
+  function renderList(containerId, upgrades, role) {
+    const el = document.getElementById(containerId);
+    el.innerHTML = '';
+    for (const u of upgrades) {
+      const item = document.createElement('button');
+      item.className = 'upgrade-item';
+      if (u.purchased) item.className += ' purchased';
+      else if (!u.affordable) item.className += ' too-expensive';
+      item.innerHTML = `${u.name} <span class="upgrade-cost">${u.purchased ? 'OWNED' : u.cost + 'pts'}</span><br><span style="font-size:10px;color:#666">${u.desc}</span>`;
+      if (!u.purchased && u.affordable) {
+        item.onclick = () => {
+          send({ type: 'upgrade', upgradeId: u.id, upgradeRole: role });
+        };
+      }
+      el.appendChild(item);
+    }
+  }
+
+  renderList('thiefUpgradeList', upgradeData.thiefUpgrades, 'thief');
+  renderList('droneUpgradeList', upgradeData.droneUpgrades, 'drone');
+}
+
+document.getElementById('btnCloseUpgrades').addEventListener('click', () => {
+  document.getElementById('upgradeScreen').style.display = 'none';
+});
+
 // ============================================================
-// INPUT HANDLING
+// INPUT HANDLING — Enhanced with new abilities
 // ============================================================
 const keys = {};
 const moveTimers = {};
 const MOVE_DELAY = 150;
+const SPRINT_MOVE_DELAY = 80;
 
 window.addEventListener('keydown', (e) => {
-  // Don't capture input when typing in chat
   if (document.activeElement === document.getElementById('chatText')) {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -366,16 +920,8 @@ window.addEventListener('keydown', (e) => {
   }
 
   keys[e.key] = true;
-  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' ','e','E'].includes(e.key)) {
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' ','e','E','q','Q','f','F','r','R','t','T','p','P'].includes(e.key)) {
     e.preventDefault();
-  }
-
-  // Enter on overlay screens
-  if (e.key === 'Enter') {
-    if (document.getElementById('lobbyScreen').style.display !== 'none' &&
-        document.getElementById('lobbyScreen').style.display !== '') {
-      return; // Lobby has its own buttons
-    }
   }
 });
 
@@ -384,78 +930,149 @@ window.addEventListener('keyup', (e) => {
   keys[e.key] = false;
   moveTimers[e.key] = 0;
 
-  // Stop picking lock
-  if ((e.key === 'e' || e.key === 'E') && myRole === 'thief') {
-    send({ type: 'input', action: 'pickStop' });
+  if ((e.key === 'e' || e.key === 'E') && (myRole === 'thief' || myRole === 'local')) {
+    send({ type: 'input', action: 'pickStop', role: isLocalCoop ? 'thief' : undefined });
   }
 });
+
+function processThiefInputs(dt, roleTag) {
+  const isSprinting = latestState && latestState.thief && latestState.thief.sprinting;
+  const moveDelay = isSprinting ? SPRINT_MOVE_DELAY : MOVE_DELAY;
+
+  const moves = [
+    { keys: ['w','W'], dx: 0, dy: -1 },
+    { keys: ['s','S'], dx: 0, dy: 1 },
+    { keys: ['a','A'], dx: -1, dy: 0 },
+    { keys: ['d','D'], dx: 1, dy: 0 },
+  ];
+  for (const m of moves) {
+    const held = m.keys.some(k => keys[k]);
+    const tk = 'thief_' + m.keys[0];
+    if (held) {
+      moveTimers[tk] = (moveTimers[tk] || 0) + dt;
+      if (moveTimers[tk] >= moveDelay || !moveTimers[tk + '_f']) {
+        if (moveTimers[tk] >= moveDelay) moveTimers[tk] = 0;
+        moveTimers[tk + '_f'] = true;
+        send({ type: 'input', action: 'move', dx: m.dx, dy: m.dy, role: roleTag });
+      }
+    } else {
+      moveTimers[tk] = 0;
+      moveTimers[tk + '_f'] = false;
+    }
+  }
+
+  if (keys['e'] || keys['E']) {
+    if (!moveTimers['pick_sent']) {
+      moveTimers['pick_sent'] = true;
+      send({ type: 'input', action: 'pickStart', role: roleTag });
+    }
+  } else {
+    moveTimers['pick_sent'] = false;
+  }
+
+  if (keys['Shift']) {
+    if (!moveTimers['sprint_sent']) {
+      moveTimers['sprint_sent'] = true;
+      send({ type: 'input', action: 'sprint', role: roleTag });
+    }
+  } else {
+    moveTimers['sprint_sent'] = false;
+  }
+
+  if (keys['q'] || keys['Q']) {
+    if (!moveTimers['noise_sent']) {
+      moveTimers['noise_sent'] = true;
+      let ndx = 0, ndy = -1;
+      if (keys['w'] || keys['W']) ndy = -1;
+      else if (keys['s'] || keys['S']) ndy = 1;
+      else if (keys['a'] || keys['A']) { ndx = -1; ndy = 0; }
+      else if (keys['d'] || keys['D']) { ndx = 1; ndy = 0; }
+      send({ type: 'input', action: 'throwNoise', dx: ndx, dy: ndy, role: roleTag });
+    }
+  } else {
+    moveTimers['noise_sent'] = false;
+  }
+
+  if (keys['f'] || keys['F']) {
+    if (!moveTimers['smoke_sent']) {
+      moveTimers['smoke_sent'] = true;
+      send({ type: 'input', action: 'smoke', role: roleTag });
+    }
+  } else {
+    moveTimers['smoke_sent'] = false;
+  }
+}
+
+function processDroneInputs(dt, roleTag) {
+  const moves = [
+    { key: 'ArrowUp', dx: 0, dy: -1 },
+    { key: 'ArrowDown', dx: 0, dy: 1 },
+    { key: 'ArrowLeft', dx: -1, dy: 0 },
+    { key: 'ArrowRight', dx: 1, dy: 0 },
+  ];
+  for (const m of moves) {
+    const tk = 'drone_' + m.key;
+    if (keys[m.key]) {
+      moveTimers[tk] = (moveTimers[tk] || 0) + dt;
+      if (moveTimers[tk] >= MOVE_DELAY || !moveTimers[tk + '_f']) {
+        if (moveTimers[tk] >= MOVE_DELAY) moveTimers[tk] = 0;
+        moveTimers[tk + '_f'] = true;
+        send({ type: 'input', action: 'move', dx: m.dx, dy: m.dy, role: roleTag });
+      }
+    } else {
+      moveTimers[tk] = 0;
+      moveTimers[tk + '_f'] = false;
+    }
+  }
+
+  if (keys[' ']) {
+    if (!moveTimers['hack_sent']) {
+      moveTimers['hack_sent'] = true;
+      send({ type: 'input', action: 'hack', role: roleTag });
+    }
+  } else {
+    moveTimers['hack_sent'] = false;
+  }
+
+  if (keys['r'] || keys['R']) {
+    if (!moveTimers['emp_sent']) {
+      moveTimers['emp_sent'] = true;
+      send({ type: 'input', action: 'emp', role: roleTag });
+    }
+  } else {
+    moveTimers['emp_sent'] = false;
+  }
+
+  if (keys['t'] || keys['T']) {
+    if (!moveTimers['decoy_sent']) {
+      moveTimers['decoy_sent'] = true;
+      send({ type: 'input', action: 'decoy', role: roleTag });
+    }
+  } else {
+    moveTimers['decoy_sent'] = false;
+  }
+
+  if (keys['p'] || keys['P']) {
+    if (!moveTimers['ping_sent']) {
+      moveTimers['ping_sent'] = true;
+      send({ type: 'input', action: 'ping', role: roleTag });
+    }
+  } else {
+    moveTimers['ping_sent'] = false;
+  }
+}
 
 function processInputs(dt) {
   if (!ws || ws.readyState !== 1 || !latestState || latestState.gameOver || latestState.gameWon || latestState.paused) return;
 
-  if (myRole === 'thief') {
-    const moves = [
-      { keys: ['w','W'], dx: 0, dy: -1 },
-      { keys: ['s','S'], dx: 0, dy: 1 },
-      { keys: ['a','A'], dx: -1, dy: 0 },
-      { keys: ['d','D'], dx: 1, dy: 0 },
-    ];
-    for (const m of moves) {
-      const held = m.keys.some(k => keys[k]);
-      const tk = 'thief_' + m.keys[0];
-      if (held) {
-        moveTimers[tk] = (moveTimers[tk] || 0) + dt;
-        if (moveTimers[tk] >= MOVE_DELAY || !moveTimers[tk + '_f']) {
-          if (moveTimers[tk] >= MOVE_DELAY) moveTimers[tk] = 0;
-          moveTimers[tk + '_f'] = true;
-          send({ type: 'input', action: 'move', dx: m.dx, dy: m.dy });
-        }
-      } else {
-        moveTimers[tk] = 0;
-        moveTimers[tk + '_f'] = false;
-      }
-    }
-
-    if (keys['e'] || keys['E']) {
-      if (!moveTimers['pick_sent']) {
-        moveTimers['pick_sent'] = true;
-        send({ type: 'input', action: 'pickStart' });
-      }
-    } else {
-      moveTimers['pick_sent'] = false;
-    }
-  }
-
-  if (myRole === 'drone') {
-    const moves = [
-      { key: 'ArrowUp', dx: 0, dy: -1 },
-      { key: 'ArrowDown', dx: 0, dy: 1 },
-      { key: 'ArrowLeft', dx: -1, dy: 0 },
-      { key: 'ArrowRight', dx: 1, dy: 0 },
-    ];
-    for (const m of moves) {
-      const tk = 'drone_' + m.key;
-      if (keys[m.key]) {
-        moveTimers[tk] = (moveTimers[tk] || 0) + dt;
-        if (moveTimers[tk] >= MOVE_DELAY || !moveTimers[tk + '_f']) {
-          if (moveTimers[tk] >= MOVE_DELAY) moveTimers[tk] = 0;
-          moveTimers[tk + '_f'] = true;
-          send({ type: 'input', action: 'move', dx: m.dx, dy: m.dy });
-        }
-      } else {
-        moveTimers[tk] = 0;
-        moveTimers[tk + '_f'] = false;
-      }
-    }
-
-    if (keys[' ']) {
-      if (!moveTimers['hack_sent']) {
-        moveTimers['hack_sent'] = true;
-        send({ type: 'input', action: 'hack' });
-      }
-    } else {
-      moveTimers['hack_sent'] = false;
-    }
+  if (isLocalCoop) {
+    // Local co-op: handle both roles from one client
+    processThiefInputs(dt, 'thief');
+    processDroneInputs(dt, 'drone');
+  } else if (myRole === 'thief') {
+    processThiefInputs(dt, undefined);
+  } else if (myRole === 'drone') {
+    processDroneInputs(dt, undefined);
   }
 }
 
@@ -492,7 +1109,7 @@ function addChatSystem(text) {
 document.getElementById('chatSend').addEventListener('click', sendChat);
 
 // ============================================================
-// RENDERING
+// RENDERING — Enhanced with all new features
 // ============================================================
 const TILE = 16;
 const canvas = document.getElementById('game');
@@ -504,6 +1121,10 @@ canvas.height = CANVAS_H;
 const VIEW_W = Math.floor(CANVAS_W / 2);
 const VIEW_H = CANVAS_H;
 
+// Minimap size for drone view
+const MINIMAP_W = 120;
+const MINIMAP_H = 90;
+
 function getTileColor(tile, view) {
   const g = view === 'thief';
   switch(tile) {
@@ -512,10 +1133,14 @@ function getTileColor(tile, view) {
     case 'D': return '#664400';
     case 'L': return '#443300';
     case '*': return '#aa8800';
+    case '$': return '#6644aa';
     case 'C': return '#880000';
     case '^': return g ? '#0d1f0d' : '#0d0d1f';
     case 'A': return '#440044';
     case '>': return '#004400';
+    case 'Z': return '#001133';
+    case 'T': return g ? '#0d1f0d' : '#331100';
+    case 'S': return '#444400';
     default: return g ? '#0d1f0d' : '#0d0d1f';
   }
 }
@@ -539,10 +1164,23 @@ function drawTile(x, y, tile, offsetX, offsetY, view, state) {
     case 'D': ctx.fillStyle = '#ff8800'; ctx.fillText('D', cx, cy); break;
     case 'L': ctx.fillStyle = '#ffaa00'; ctx.fillText('L', cx, cy); break;
     case '*': ctx.fillStyle = '#ffff00'; ctx.fillText('*', cx, cy); break;
+    case '$': ctx.fillStyle = '#cc88ff'; ctx.fillText('$', cx, cy); break;
     case 'C': {
       const cam = state.cameras.find(c => c.x === x && c.y === y);
       ctx.fillStyle = cam && cam.active ? '#ff0000' : '#333';
       ctx.fillText('C', cx, cy);
+      // Draw camera direction indicator
+      if (cam && cam.active && view === 'drone') {
+        const dirVecs = [{x:0,y:-1},{x:1,y:0},{x:0,y:1},{x:-1,y:0}];
+        const dv = dirVecs[cam.dir];
+        ctx.fillStyle = 'rgba(255,0,0,0.06)';
+        for (let i = 1; i <= 3; i++) {
+          const vx = x + dv.x * i, vy = y + dv.y * i;
+          if (vx >= 0 && vx < state.mapWidth && vy >= 0 && vy < state.mapHeight) {
+            ctx.fillRect(offsetX + vx * TILE, offsetY + vy * TILE, TILE, TILE);
+          }
+        }
+      }
       break;
     }
     case '^': ctx.fillStyle = '#00ffff'; ctx.fillText('^', cx, cy); break;
@@ -550,57 +1188,293 @@ function drawTile(x, y, tile, offsetX, offsetY, view, state) {
     case '>':
       ctx.fillStyle = state.exitOpen ? '#00ff00' : '#444';
       ctx.fillText('>', cx, cy);
+      // Pulsing glow when open
+      if (state.exitOpen) {
+        const pulse = Math.sin(Date.now() / 300) * 0.3 + 0.3;
+        ctx.fillStyle = `rgba(0,255,0,${pulse})`;
+        ctx.fillRect(px, py, TILE, TILE);
+      }
       break;
-  }
-}
-
-function drawGuard(guard, offsetX, offsetY, view) {
-  const px = offsetX + guard.x * TILE;
-  const py = offsetY + guard.y * TILE;
-  ctx.font = 'bold 13px Courier New';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillStyle = guard.frozen ? '#666666' : '#ff3333';
-  ctx.fillText('G', px + TILE/2, py + TILE/2);
-  if (!guard.frozen && view === 'drone') {
-    const dirVecs = [{x:0,y:-1},{x:1,y:0},{x:0,y:1},{x:-1,y:0}];
-    const dv = dirVecs[guard.dir];
-    ctx.fillStyle = 'rgba(255,0,0,0.08)';
-    for (let i = 1; i <= 3; i++) {
-      const vx = guard.x + dv.x * i, vy = guard.y + dv.y * i;
-      ctx.fillRect(offsetX + vx * TILE, offsetY + vy * TILE, TILE, TILE);
+    case 'Z': {
+      const laser = state.lasers ? state.lasers.find(l => l.x === x && l.y === y) : null;
+      if (laser && laser.active) {
+        // Active laser — pulsing red
+        const pulse = Math.sin(Date.now() / 150) * 0.4 + 0.6;
+        ctx.fillStyle = `rgba(255,0,0,${pulse * 0.7})`;
+        ctx.fillRect(px, py, TILE, TILE);
+        ctx.strokeStyle = `rgba(255,50,50,${pulse})`;
+        ctx.lineWidth = 2;
+        // Draw laser lines
+        ctx.beginPath();
+        ctx.moveTo(px + 2, py + TILE/2);
+        ctx.lineTo(px + TILE - 2, py + TILE/2);
+        ctx.moveTo(px + TILE/2, py + 2);
+        ctx.lineTo(px + TILE/2, py + TILE - 2);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+      } else {
+        // Inactive laser — dim
+        ctx.fillStyle = 'rgba(100,0,0,0.2)';
+        ctx.fillRect(px, py, TILE, TILE);
+        ctx.fillStyle = '#331111';
+        ctx.fillText('z', cx, cy);
+      }
+      break;
+    }
+    case 'T': {
+      const tw = state.tripwires ? state.tripwires.find(t => t.x === x && t.y === y) : null;
+      if (tw && !tw.triggered) {
+        // Only visible on drone view
+        if (view === 'drone') {
+          ctx.fillStyle = '#ff6600';
+          ctx.fillText('~', cx, cy);
+        }
+        // Thief sees slightly different floor
+      } else if (tw && tw.triggered) {
+        ctx.fillStyle = '#333';
+        ctx.fillText('x', cx, cy);
+      }
+      break;
+    }
+    case 'S': {
+      const safe = state.safes ? state.safes.find(s => s.x === x && s.y === y) : null;
+      if (safe && !safe.open) {
+        ctx.fillStyle = '#ffcc00';
+        ctx.font = 'bold 12px Courier New';
+        ctx.fillText('S', cx, cy);
+        ctx.font = '12px Courier New';
+      }
+      break;
     }
   }
 }
 
-function drawView(state, view, offsetX) {
+function drawGuard(guard, offsetX, offsetY, view, state) {
+  const px = offsetX + guard.x * TILE;
+  const py = offsetY + guard.y * TILE;
+  ctx.font = 'bold 13px Courier New';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+  // Color based on alert level
+  let color;
+  if (guard.frozen) color = '#666666';
+  else if (guard.alertLevel === 2) color = '#ff0000';
+  else if (guard.alertLevel === 1) color = '#ff8800';
+  else color = '#ff3333';
+
+  ctx.fillStyle = color;
+  ctx.fillText('G', px + TILE/2, py + TILE/2);
+
+  // Alert level indicator
+  if (!guard.frozen && guard.alertLevel > 0) {
+    ctx.font = '8px Courier New';
+    ctx.fillStyle = guard.alertLevel === 2 ? '#ff0000' : '#ff8800';
+    ctx.fillText(guard.alertLevel === 2 ? '!!' : '?', px + TILE/2, py - 2);
+    ctx.font = '12px Courier New';
+  }
+
+  // Vision cone — always show on drone view, show on thief view only if within thief vision
+  if (!guard.frozen) {
+    const dirVecs = [{x:0,y:-1},{x:1,y:0},{x:0,y:1},{x:-1,y:0}];
+    const dv = dirVecs[guard.dir];
+    const visionRange = guard.alertLevel >= 1 ? 5 : 3;
+    const alpha = guard.alertLevel >= 1 ? 0.1 : 0.06;
+    ctx.fillStyle = guard.alertLevel === 2 ? `rgba(255,0,0,${alpha})` :
+                    guard.alertLevel === 1 ? `rgba(255,136,0,${alpha})` :
+                    `rgba(255,0,0,${alpha})`;
+    for (let i = 1; i <= visionRange; i++) {
+      const vx = guard.x + dv.x * i, vy = guard.y + dv.y * i;
+      if (vx < 0 || vx >= state.mapWidth || vy < 0 || vy >= state.mapHeight) break;
+      if (state.map[vy][vx] === '#') break;
+      ctx.fillRect(offsetX + vx * TILE, offsetY + vy * TILE, TILE, TILE);
+    }
+    // Peripheral vision for alerted guards
+    if (guard.alertLevel >= 1) {
+      const perps = dv.x === 0 ? [{x:1,y:0},{x:-1,y:0}] : [{x:0,y:1},{x:0,y:-1}];
+      for (const p of perps) {
+        const vx = guard.x + p.x, vy = guard.y + p.y;
+        if (vx >= 0 && vx < state.mapWidth && vy >= 0 && vy < state.mapHeight && state.map[vy][vx] !== '#') {
+          ctx.fillRect(offsetX + vx * TILE, offsetY + vy * TILE, TILE, TILE);
+        }
+      }
+    }
+  }
+}
+
+function drawEffects(state, offsetX, offsetY, view) {
+  // Noisemakers
+  if (state.noisemakers) {
+    for (const nm of state.noisemakers) {
+      const px = offsetX + nm.x * TILE;
+      const py = offsetY + nm.y * TILE;
+      const pulse = Math.sin(Date.now() / 100) * 0.3 + 0.5;
+      ctx.fillStyle = `rgba(255,200,0,${pulse})`;
+      ctx.beginPath();
+      ctx.arc(px + TILE/2, py + TILE/2, TILE * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+      // Sound waves
+      const r = TILE * (1 + Math.sin(Date.now() / 200) * 0.5);
+      ctx.strokeStyle = `rgba(255,200,0,${0.3 * (1 - r/(TILE*2))})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(px + TILE/2, py + TILE/2, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  // Smoke clouds
+  if (state.smokeClouds) {
+    for (const sc of state.smokeClouds) {
+      const radius = 1.5;
+      for (let dy = -Math.ceil(radius); dy <= Math.ceil(radius); dy++) {
+        for (let dx = -Math.ceil(radius); dx <= Math.ceil(radius); dx++) {
+          if (Math.abs(dx) + Math.abs(dy) > 2) continue;
+          const sx = sc.x + dx, sy = sc.y + dy;
+          if (sx < 0 || sx >= state.mapWidth || sy < 0 || sy >= state.mapHeight) continue;
+          const px = offsetX + sx * TILE;
+          const py = offsetY + sy * TILE;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          const alpha = Math.max(0, 0.5 - dist * 0.15) * (sc.timer / 5000);
+          ctx.fillStyle = `rgba(180,180,200,${alpha})`;
+          ctx.fillRect(px, py, TILE, TILE);
+        }
+      }
+    }
+  }
+
+  // Decoys
+  if (state.decoys) {
+    for (const dec of state.decoys) {
+      const px = offsetX + dec.x * TILE;
+      const py = offsetY + dec.y * TILE;
+      const blink = Math.floor(Date.now() / 200) % 2;
+      if (blink) {
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.font = 'bold 14px Courier New';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('\u2620', px + TILE/2, py + TILE/2);
+        // Hologram effect
+        ctx.fillStyle = 'rgba(51,170,255,0.15)';
+        ctx.fillRect(px - 2, py - 2, TILE + 4, TILE + 4);
+      }
+    }
+  }
+
+  // Drone ping
+  if (state.drone && state.drone.ping) {
+    const ping = state.drone.ping;
+    const px = offsetX + ping.x * TILE;
+    const py = offsetY + ping.y * TILE;
+    const pulse = Math.sin(Date.now() / 150) * 0.4 + 0.6;
+    // Pulsing diamond
+    ctx.strokeStyle = `rgba(51,170,255,${pulse})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    const s = TILE * 0.6;
+    ctx.moveTo(px + TILE/2, py + TILE/2 - s);
+    ctx.lineTo(px + TILE/2 + s, py + TILE/2);
+    ctx.lineTo(px + TILE/2, py + TILE/2 + s);
+    ctx.lineTo(px + TILE/2 - s, py + TILE/2);
+    ctx.closePath();
+    ctx.stroke();
+    // Expanding ring
+    const ringR = (Date.now() % 1000) / 1000 * TILE * 2;
+    const ringAlpha = 1 - ringR / (TILE * 2);
+    ctx.strokeStyle = `rgba(51,170,255,${ringAlpha * 0.5})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(px + TILE/2, py + TILE/2, ringR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+  }
+}
+
+function drawMinimap(state, offsetX, offsetY) {
+  const mmX = offsetX + VIEW_W - MINIMAP_W - 8;
+  const mmY = offsetY + 8;
+  const scaleX = MINIMAP_W / state.mapWidth;
+  const scaleY = MINIMAP_H / state.mapHeight;
+
+  // Background
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(mmX - 1, mmY - 1, MINIMAP_W + 2, MINIMAP_H + 2);
+  ctx.strokeStyle = 'rgba(51,170,255,0.3)';
+  ctx.strokeRect(mmX - 1, mmY - 1, MINIMAP_W + 2, MINIMAP_H + 2);
+
+  // Draw map tiles (simplified)
+  for (let y = 0; y < state.mapHeight; y++) {
+    for (let x = 0; x < state.mapWidth; x++) {
+      const tile = state.map[y][x];
+      let color = null;
+      if (tile === '#') color = 'rgba(20,20,50,0.8)';
+      else if (tile === '.') color = 'rgba(30,30,60,0.5)';
+      else if (tile === 'D' || tile === 'L') color = 'rgba(100,70,0,0.6)';
+      else if (tile === '*') color = 'rgba(255,255,0,0.8)';
+      else if (tile === '$') color = 'rgba(200,100,255,0.8)';
+      else if (tile === 'C') color = 'rgba(255,0,0,0.6)';
+      else if (tile === '>') color = state.exitOpen ? 'rgba(0,255,0,0.8)' : 'rgba(80,80,80,0.5)';
+      else if (tile === 'Z') color = 'rgba(255,0,0,0.3)';
+      else if (tile === 'S') color = 'rgba(255,200,0,0.6)';
+      else color = 'rgba(30,30,60,0.3)';
+      ctx.fillStyle = color;
+      ctx.fillRect(mmX + x * scaleX, mmY + y * scaleY, Math.max(1, scaleX), Math.max(1, scaleY));
+    }
+  }
+
+  // Guards on minimap
+  for (const g of state.guards) {
+    ctx.fillStyle = g.frozen ? '#666' : g.alertLevel === 2 ? '#ff0000' : g.alertLevel === 1 ? '#ff8800' : '#ff3333';
+    ctx.fillRect(mmX + g.x * scaleX - 1, mmY + g.y * scaleY - 1, 3, 3);
+  }
+
+  // Thief on minimap
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(mmX + state.thief.x * scaleX - 1, mmY + state.thief.y * scaleY - 1, 3, 3);
+
+  // Drone cursor on minimap
+  ctx.strokeStyle = '#33aaff';
+  ctx.strokeRect(mmX + state.drone.x * scaleX - 2, mmY + state.drone.y * scaleY - 2, 4, 4);
+
+  // Label
+  ctx.font = '7px Courier New';
+  ctx.fillStyle = 'rgba(51,170,255,0.5)';
+  ctx.textAlign = 'left';
+  ctx.fillText('MINIMAP', mmX + 2, mmY + MINIMAP_H + 8);
+}
+
+function drawView(state, view, offsetX, vw) {
   ctx.save();
   ctx.beginPath();
-  ctx.rect(offsetX, 0, VIEW_W, VIEW_H);
+  ctx.rect(offsetX, 0, vw, VIEW_H);
   ctx.clip();
+
+  // Apply screen shake
+  ctx.translate(shakeX, shakeY);
+
   ctx.fillStyle = '#0a0a0a';
-  ctx.fillRect(offsetX, 0, VIEW_W, VIEW_H);
+  ctx.fillRect(offsetX - 4, -4, vw + 8, VIEW_H + 8);
 
   const mapPixelW = state.mapWidth * TILE;
   const mapPixelH = state.mapHeight * TILE;
   let camX, camY;
   if (view === 'thief') {
-    camX = state.thief.x * TILE + TILE/2 - VIEW_W/2;
+    camX = state.thief.x * TILE + TILE/2 - vw/2;
     camY = state.thief.y * TILE + TILE/2 - VIEW_H/2;
   } else {
-    camX = mapPixelW/2 - VIEW_W/2;
-    camY = mapPixelH/2 - VIEW_H/2;
+    camX = state.drone.x * TILE + TILE/2 - vw/2;
+    camY = state.drone.y * TILE + TILE/2 - VIEW_H/2;
   }
-  camX = Math.max(0, Math.min(mapPixelW - VIEW_W, camX));
+  camX = Math.max(0, Math.min(mapPixelW - vw, camX));
   camY = Math.max(0, Math.min(mapPixelH - VIEW_H, camY));
 
   const drawOffX = offsetX - camX;
   const drawOffY = -camY;
   const startTX = Math.max(0, Math.floor(camX / TILE));
   const startTY = Math.max(0, Math.floor(camY / TILE));
-  const endTX = Math.min(state.mapWidth - 1, Math.ceil((camX + VIEW_W) / TILE));
+  const endTX = Math.min(state.mapWidth - 1, Math.ceil((camX + vw) / TILE));
   const endTY = Math.min(state.mapHeight - 1, Math.ceil((camY + VIEW_H) / TILE));
 
-  const thiefVision = 4;
+  const thiefVision = state.thief.visionRadius || 4;
   for (let y = startTY; y <= endTY; y++) {
     for (let x = startTX; x <= endTX; x++) {
       if (view === 'thief') {
@@ -617,13 +1491,17 @@ function drawView(state, view, offsetX) {
     }
   }
 
+  // Draw guards
   for (const guard of state.guards) {
     if (view === 'thief') {
       const dist = Math.abs(guard.x - state.thief.x) + Math.abs(guard.y - state.thief.y);
       if (dist > thiefVision) continue;
     }
-    drawGuard(guard, drawOffX, drawOffY, view);
+    drawGuard(guard, drawOffX, drawOffY, view, state);
   }
+
+  // Draw effects (noisemakers, smoke, decoys, pings)
+  drawEffects(state, drawOffX, drawOffY, view);
 
   // Thief
   const tpx = drawOffX + state.thief.x * TILE;
@@ -631,8 +1509,13 @@ function drawView(state, view, offsetX) {
   ctx.font = 'bold 14px Courier New';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   if (state.thief.invulnTimer <= 0 || Math.floor(Date.now() / 100) % 2 === 0) {
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText('@', tpx + TILE/2, tpy + TILE/2);
+    ctx.fillStyle = state.thief.sprinting ? '#ffff00' : '#ffffff';
+    ctx.fillText('\u2620', tpx + TILE/2, tpy + TILE/2);
+    // Sprint trail effect
+    if (state.thief.sprinting) {
+      ctx.fillStyle = 'rgba(255,255,0,0.15)';
+      ctx.fillRect(tpx - 2, tpy - 2, TILE + 4, TILE + 4);
+    }
   }
 
   // Drone cursor
@@ -654,15 +1537,15 @@ function drawView(state, view, offsetX) {
 
   // Scanlines
   ctx.fillStyle = view === 'thief' ? 'rgba(0,255,0,0.015)' : 'rgba(0,100,255,0.015)';
-  for (let sy = 0; sy < VIEW_H; sy += 3) ctx.fillRect(offsetX, sy, VIEW_W, 1);
+  for (let sy = 0; sy < VIEW_H; sy += 3) ctx.fillRect(offsetX - 4, sy, vw + 8, 1);
 
   // Label
   ctx.font = '10px Courier New'; ctx.textAlign = 'left';
   ctx.fillStyle = view === 'thief' ? 'rgba(0,255,0,0.3)' : 'rgba(0,100,255,0.3)';
   ctx.fillText(view === 'thief' ? '[ THIEF CAM ]' : '[ DRONE FEED ]', offsetX + 8, 14);
 
-  // Role indicator
-  if ((view === 'thief' && myRole === 'thief') || (view === 'drone' && myRole === 'drone')) {
+  // Role indicator (online only — not shown in local co-op)
+  if (!isLocalCoop && ((view === 'thief' && myRole === 'thief') || (view === 'drone' && myRole === 'drone'))) {
     ctx.fillStyle = view === 'thief' ? 'rgba(0,255,0,0.2)' : 'rgba(0,100,255,0.2)';
     ctx.font = '9px Courier New';
     ctx.fillText('[ YOU ]', offsetX + 8, 26);
@@ -672,15 +1555,22 @@ function drawView(state, view, offsetX) {
   if (state.alarmActive) {
     const flash = Math.sin(Date.now() / 100) * 0.5 + 0.5;
     ctx.fillStyle = `rgba(255,0,0,${flash * 0.08})`;
-    ctx.fillRect(offsetX, 0, VIEW_W, VIEW_H);
+    ctx.fillRect(offsetX - 4, -4, vw + 8, VIEW_H + 8);
   }
 
-  // Divider
-  if (view === 'thief') {
+  // Draw minimap on drone view
+  if (view === 'drone') {
+    ctx.translate(-shakeX, -shakeY);
+    drawMinimap(state, offsetX, 0, vw);
+    ctx.translate(shakeX, shakeY);
+  }
+
+  // Divider line (only in split-screen local co-op)
+  if (isLocalCoop && view === 'thief') {
     ctx.strokeStyle = '#222'; ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(offsetX + VIEW_W, 0);
-    ctx.lineTo(offsetX + VIEW_W, VIEW_H);
+    ctx.moveTo(offsetX + vw, 0);
+    ctx.lineTo(offsetX + vw, VIEW_H);
     ctx.stroke();
   }
 
@@ -689,26 +1579,38 @@ function drawView(state, view, offsetX) {
 
 function render(state) {
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-  drawView(state, 'thief', 0);
-  drawView(state, 'drone', VIEW_W);
+
+  if (isLocalCoop) {
+    // Split screen for local co-op
+    drawView(state, 'thief', 0, VIEW_W);
+    drawView(state, 'drone', VIEW_W, VIEW_W);
+  } else if (myRole === 'thief') {
+    // Full-width thief view in online mode
+    drawView(state, 'thief', 0, CANVAS_W);
+  } else if (myRole === 'drone') {
+    // Full-width drone view in online mode
+    drawView(state, 'drone', 0, CANVAS_W);
+  }
 
   // UI panels
   const tp = document.getElementById('thiefPanel');
   const hpPct = (state.thief.hp / state.thief.maxHp) * 100;
   const hpColor = state.thief.hp > 1 ? '#33ff33' : '#ff3333';
   tp.innerHTML = `
-    <b>THIEF</b> &nbsp; HP: <span class="bar-bg"><span class="bar-fill" style="width:${hpPct}%;background:${hpColor}"></span></span> ${state.thief.hp}/${state.thief.maxHp}<br>
-    Loot: ${state.primaryLootCollected}/${state.primaryLootTotal} primary | ${state.bonusLootCollected} bonus<br>
-    ${state.thief.picking ? `Picking lock: ${Math.ceil(state.thief.pickTimer/1000)}s` : state.thief.spotted ? '<span style="color:#ff3333">!! SPOTTED !!</span>' : 'Status: Ready'}
+    <b>THIEF</b> HP: <span class="bar-bg"><span class="bar-fill" style="width:${hpPct}%;background:${hpColor}"></span></span> ${state.thief.hp}/${state.thief.maxHp}
+    &nbsp; Loot: ${state.primaryLootCollected}/${state.primaryLootTotal} | +${state.bonusLootCollected} bonus<br>
+    ${state.thief.picking ? `Picking: ${Math.ceil(state.thief.pickTimer/1000)}s` : state.thief.spotted ? '<span style="color:#ff3333">!! SPOTTED !!</span>' : state.thief.sprinting ? '<span style="color:#ffff00">SPRINTING</span>' : 'Ready'}
+    &nbsp; Vision: ${state.thief.visionRadius || 4}
   `;
 
   const dp = document.getElementById('dronePanel');
   const batPct = (state.drone.battery / state.drone.maxBattery) * 100;
   const batColor = state.drone.battery > 25 ? '#33aaff' : '#ff8800';
   dp.innerHTML = `
-    <b>DRONE</b> &nbsp; Battery: <span class="bar-bg"><span class="bar-fill" style="width:${batPct}%;background:${batColor}"></span></span> ${state.drone.battery}%<br>
-    Hacks: ${state.drone.hacks} | ${state.drone.charging ? '<span style="color:#00ffff">CHARGING...</span>' : state.drone.battery <= 0 ? '<span style="color:#ff3333">NO POWER</span>' : 'Online'}<br>
-    Guards frozen: ${state.guards.filter(g => g.frozen).length} | Cameras: ${state.cameras.filter(c => c.active).length} active
+    <b>DRONE</b> Bat: <span class="bar-bg"><span class="bar-fill" style="width:${batPct}%;background:${batColor}"></span></span> ${state.drone.battery}%
+    &nbsp; Hacks: ${state.drone.hacks} | Cost: ${state.drone.hackCost}<br>
+    ${state.drone.charging ? '<span style="color:#00ffff">CHARGING</span>' : state.drone.battery <= 0 ? '<span style="color:#ff3333">NO POWER</span>' : 'Online'}
+    &nbsp; Guards: ${state.guards.filter(g => g.frozen).length} frozen | Cams: ${state.cameras.filter(c => c.active).length}
   `;
 
   const cp = document.getElementById('centerPanel');
@@ -716,16 +1618,46 @@ function render(state) {
   const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
   const secs = String(elapsed % 60).padStart(2, '0');
   cp.innerHTML = `
-    <b>LEVEL ${state.level}</b> &nbsp; <span class="role-badge ${myRole}">${myRole ? myRole.toUpperCase() : ''}</span><br>
-    Time: ${mins}:${secs}<br>
+    <b>LEVEL ${state.level}/${state.maxLevels || 5}</b> &nbsp; <span class="role-badge ${myRole}">${myRole ? myRole.toUpperCase() : ''}</span><br>
+    Time: ${mins}:${secs} | Score: ${state.score} | Bank: ${state.totalScore || 0}<br>
     ${state.alarmActive ? `<span style="color:#ff3333">ALARM: ${Math.ceil(state.alarmTimer/1000)}s</span>` : state.exitOpen ? '<span style="color:#33ff33">EXIT OPEN</span>' : `Loot: ${state.primaryLootCollected}/${state.primaryLootTotal}`}
   `;
+
+  // Abilities bar
+  const ab = document.getElementById('abilitiesBar');
+  if (myRole === 'thief') {
+    const sprintReady = !state.thief.sprinting && state.thief.sprintCooldown <= 0;
+    const sprintCD = state.thief.sprintCooldown > 0 ? Math.ceil(state.thief.sprintCooldown / 1000) + 's' : '';
+    ab.innerHTML = `
+      <span class="ability"><span class="key">[Shift]</span> Sprint: ${state.thief.sprinting ? '<span style="color:#ffff00">ACTIVE</span>' : sprintReady ? '<span class="ready">Ready</span>' : `<span class="cooldown">${sprintCD}</span>`}</span>
+      <span class="ability"><span class="key">[Q]</span> Noise: <span class="${state.thief.noiseCharges > 0 ? 'charges' : 'empty'}">${state.thief.noiseCharges}</span></span>
+      <span class="ability"><span class="key">[F]</span> Smoke: <span class="${state.thief.smokeCharges > 0 ? 'charges' : 'empty'}">${state.thief.smokeCharges}</span></span>
+      <span class="ability"><span class="key">[E]</span> Pick Lock</span>
+    `;
+  } else if (myRole === 'drone') {
+    ab.innerHTML = `
+      <span class="ability"><span class="key">[Space]</span> Hack (${state.drone.hackCost}%)</span>
+      <span class="ability"><span class="key">[R]</span> EMP: <span class="${state.drone.empCharges > 0 ? 'charges' : 'empty'}">${state.drone.empCharges}</span></span>
+      <span class="ability"><span class="key">[T]</span> Decoy: <span class="${state.drone.decoyCharges > 0 ? 'charges' : 'empty'}">${state.drone.decoyCharges}</span></span>
+      <span class="ability"><span class="key">[P]</span> Ping</span>
+    `;
+  }
+
+  // Objectives bar
+  const ob = document.getElementById('objectivesBar');
+  if (state.objectives) {
+    let objHtml = '<span style="color:#666">OBJECTIVES: </span>';
+    for (const obj of state.objectives) {
+      objHtml += `<span class="obj ${obj.completed ? 'done' : 'pending'}">${obj.completed ? '[+1000]' : '[ ]'} ${obj.desc}</span>`;
+    }
+    ob.innerHTML = objHtml;
+  }
 }
 
 // ============================================================
 // SCREEN MANAGEMENT
 // ============================================================
-const allScreens = ['lobbyScreen','waitScreen','pauseScreen','gameOverScreen','winScreen','completeScreen'];
+const allScreens = ['lobbyScreen','waitScreen','pauseScreen','gameOverScreen','winScreen','completeScreen','upgradeScreen'];
 
 function hideAllOverlays() {
   allScreens.forEach(id => document.getElementById(id).style.display = 'none');
@@ -740,8 +1672,14 @@ function showGame() {
   hideAllOverlays();
   document.getElementById('game').style.display = 'block';
   document.getElementById('ui').style.display = 'flex';
-  document.getElementById('chatArea').style.display = 'flex';
+  document.getElementById('abilitiesBar').style.display = 'block';
+  document.getElementById('objectivesBar').style.display = 'block';
+  document.getElementById('chatArea').style.display = isMobile ? 'none' : 'flex';
   gameVisible = true;
+  Ambient.start();
+  MenuMusic.stop();
+  resizeCanvas();
+  setupTouchControls();
 }
 
 // ============================================================
@@ -771,6 +1709,222 @@ document.getElementById('codeInput').addEventListener('keydown', (e) => {
 });
 
 // ============================================================
+// MOBILE SUPPORT — Canvas scaling + Touch controls
+// ============================================================
+const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+const isMobile = isTouchDevice && window.innerWidth <= 768;
+let touchActiveRole = 'thief'; // For local co-op touch role switching
+
+function resizeCanvas() {
+  const c = document.getElementById('game');
+  const maxW = window.innerWidth;
+
+  if (isMobile || maxW < CANVAS_W) {
+    const scale = maxW / CANVAS_W;
+    c.style.width = maxW + 'px';
+    c.style.height = Math.floor(CANVAS_H * scale) + 'px';
+    ['ui','abilitiesBar','objectivesBar','chatArea'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.width = maxW + 'px';
+    });
+  } else {
+    c.style.width = '';
+    c.style.height = '';
+  }
+
+  // Orientation banner
+  if (isTouchDevice && gameVisible) {
+    const banner = document.getElementById('orientBanner');
+    if (window.innerHeight > window.innerWidth && window.innerWidth < 600) {
+      banner.style.display = 'block';
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+}
+
+window.addEventListener('resize', () => {
+  if (gameVisible) resizeCanvas();
+});
+
+// Prevent default touch on canvas to stop scrolling/zooming during gameplay
+document.getElementById('game').addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+document.getElementById('game').addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+
+function setupTouchControls() {
+  if (!isTouchDevice) return;
+  const tc = document.getElementById('touchControls');
+  tc.classList.add('active');
+
+  // Show chat toggle on mobile
+  if (isMobile) {
+    document.getElementById('chatToggle').classList.add('visible');
+  }
+
+  // Local co-op role switching on touch
+  if (isLocalCoop && isTouchDevice) {
+    const rs = document.getElementById('roleSwitch');
+    rs.classList.add('active');
+    rs.querySelectorAll('.role-tab').forEach(tab => {
+      tab.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        switchTouchRole(tab.dataset.role);
+      });
+      tab.addEventListener('click', () => switchTouchRole(tab.dataset.role));
+    });
+  }
+
+  buildTouchAbilities(myRole === 'drone' ? 'drone' : 'thief');
+}
+
+function switchTouchRole(newRole) {
+  touchActiveRole = newRole;
+  const rs = document.getElementById('roleSwitch');
+  rs.querySelectorAll('.role-tab').forEach(tab => {
+    tab.classList.toggle('selected', tab.dataset.role === newRole);
+  });
+  buildTouchAbilities(newRole);
+}
+
+function buildTouchAbilities(activeRole) {
+  const tc = document.getElementById('touchControls');
+  if (activeRole === 'drone') {
+    tc.classList.add('drone-view');
+  } else {
+    tc.classList.remove('drone-view');
+  }
+
+  // Update d-pad labels
+  const dpadBtns = tc.querySelectorAll('.touch-dpad-btn');
+  if (activeRole === 'drone') {
+    dpadBtns.forEach(b => {
+      if (b.classList.contains('up')) b.textContent = '\u25B2';
+      if (b.classList.contains('down')) b.textContent = '\u25BC';
+      if (b.classList.contains('left')) b.textContent = '\u25C0';
+      if (b.classList.contains('right')) b.textContent = '\u25B6';
+    });
+  } else {
+    dpadBtns.forEach(b => {
+      if (b.classList.contains('up')) b.textContent = 'W';
+      if (b.classList.contains('down')) b.textContent = 'S';
+      if (b.classList.contains('left')) b.textContent = 'A';
+      if (b.classList.contains('right')) b.textContent = 'D';
+    });
+  }
+
+  const roleTag = isLocalCoop ? activeRole : undefined;
+
+  // Build ability buttons
+  const ab = document.getElementById('touchAbilities');
+  ab.innerHTML = '';
+  if (activeRole === 'thief') {
+    ab.innerHTML = `
+      <div class="touch-row">
+        <div class="touch-btn yellow" id="tbSprint">SPRINT</div>
+        <div class="touch-btn" id="tbPick">PICK<br>LOCK</div>
+      </div>
+      <div class="touch-row">
+        <div class="touch-btn yellow" id="tbNoise">NOISE</div>
+        <div class="touch-btn red" id="tbSmoke">SMOKE</div>
+      </div>
+    `;
+    addTouchAbility('tbSprint', () => send({ type: 'input', action: 'sprint', role: roleTag }));
+    addTouchHold('tbPick',
+      () => send({ type: 'input', action: 'pickStart', role: roleTag }),
+      () => send({ type: 'input', action: 'pickStop', role: roleTag })
+    );
+    addTouchAbility('tbNoise', () => send({ type: 'input', action: 'throwNoise', dx: 0, dy: -1, role: roleTag }));
+    addTouchAbility('tbSmoke', () => send({ type: 'input', action: 'smoke', role: roleTag }));
+  } else if (activeRole === 'drone') {
+    ab.innerHTML = `
+      <div class="touch-row">
+        <div class="touch-btn blue" id="tbHack">HACK</div>
+        <div class="touch-btn blue" id="tbPing">PING</div>
+      </div>
+      <div class="touch-row">
+        <div class="touch-btn yellow" id="tbEmp">EMP</div>
+        <div class="touch-btn yellow" id="tbDecoy">DECOY</div>
+      </div>
+    `;
+    addTouchAbility('tbHack', () => send({ type: 'input', action: 'hack', role: roleTag }));
+    addTouchAbility('tbPing', () => send({ type: 'input', action: 'ping', role: roleTag }));
+    addTouchAbility('tbEmp', () => send({ type: 'input', action: 'emp', role: roleTag }));
+    addTouchAbility('tbDecoy', () => send({ type: 'input', action: 'decoy', role: roleTag }));
+  }
+}
+
+function addTouchAbility(id, fn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('touchstart', (e) => { e.preventDefault(); fn(); }, { passive: false });
+}
+
+function addTouchHold(id, startFn, stopFn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('touchstart', (e) => { e.preventDefault(); startFn(); }, { passive: false });
+  el.addEventListener('touchend', (e) => { e.preventDefault(); stopFn(); }, { passive: false });
+  el.addEventListener('touchcancel', (e) => { e.preventDefault(); stopFn(); }, { passive: false });
+}
+
+// D-pad touch handling with repeat
+(function setupDpad() {
+  const dpad = document.getElementById('touchDpad');
+  if (!dpad) return;
+  let dpadInterval = null;
+  let activeDx = 0, activeDy = 0;
+
+  function startDpad(dx, dy) {
+    activeDx = dx; activeDy = dy;
+    sendDpadMove();
+    if (dpadInterval) clearInterval(dpadInterval);
+    dpadInterval = setInterval(sendDpadMove, 130);
+  }
+
+  function stopDpad() {
+    activeDx = 0; activeDy = 0;
+    if (dpadInterval) { clearInterval(dpadInterval); dpadInterval = null; }
+  }
+
+  function sendDpadMove() {
+    if (!activeDx && !activeDy) return;
+    const roleTag = isLocalCoop ? touchActiveRole : undefined;
+    send({ type: 'input', action: 'move', dx: activeDx, dy: activeDy, role: roleTag });
+  }
+
+  dpad.querySelectorAll('.touch-dpad-btn').forEach(btn => {
+    const dx = parseInt(btn.dataset.dx);
+    const dy = parseInt(btn.dataset.dy);
+    btn.addEventListener('touchstart', (e) => { e.preventDefault(); startDpad(dx, dy); }, { passive: false });
+    btn.addEventListener('touchend', (e) => { e.preventDefault(); stopDpad(); }, { passive: false });
+    btn.addEventListener('touchcancel', (e) => { e.preventDefault(); stopDpad(); }, { passive: false });
+  });
+})();
+
+// Chat toggle on mobile
+document.getElementById('chatToggle').addEventListener('click', () => {
+  const chatArea = document.getElementById('chatArea');
+  chatArea.classList.toggle('mobile-open');
+  const toggle = document.getElementById('chatToggle');
+  toggle.textContent = chatArea.classList.contains('mobile-open') ? '[ HIDE CHAT ]' : '[ CHAT ]';
+});
+
+// Start music on first user interaction (needed for audio context)
+let musicAutoStarted = false;
+document.addEventListener('click', () => {
+  if (!musicAutoStarted && !gameVisible) {
+    MenuMusic.start();
+    musicAutoStarted = true;
+  }
+}, { once: false });
+document.addEventListener('touchstart', () => {
+  if (!musicAutoStarted && !gameVisible) {
+    MenuMusic.start();
+    musicAutoStarted = true;
+  }
+}, { once: false });
+
+// ============================================================
 // MAIN RENDER LOOP
 // ============================================================
 let lastFrame = 0;
@@ -780,6 +1934,7 @@ function frame(time) {
   lastFrame = time;
 
   processInputs(dt);
+  updateShake(dt);
   if (latestState && gameVisible) render(latestState);
 
   requestAnimationFrame(frame);
