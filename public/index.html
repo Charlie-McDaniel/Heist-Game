@@ -1592,48 +1592,86 @@ function render(state) {
     drawView(state, 'drone', 0, CANVAS_W);
   }
 
-  // UI panels
-  const tp = document.getElementById('thiefPanel');
-  const hpPct = (state.thief.hp / state.thief.maxHp) * 100;
-  const hpColor = state.thief.hp > 1 ? '#33ff33' : '#ff3333';
-  tp.innerHTML = `
-    <b>THIEF</b> HP: <span class="bar-bg"><span class="bar-fill" style="width:${hpPct}%;background:${hpColor}"></span></span> ${state.thief.hp}/${state.thief.maxHp}
-    &nbsp; Loot: ${state.primaryLootCollected}/${state.primaryLootTotal} | +${state.bonusLootCollected} bonus<br>
-    ${state.thief.picking ? `Picking: ${Math.ceil(state.thief.pickTimer/1000)}s` : state.thief.spotted ? '<span style="color:#ff3333">!! SPOTTED !!</span>' : state.thief.sprinting ? '<span style="color:#ffff00">SPRINTING</span>' : 'Ready'}
-    &nbsp; Vision: ${state.thief.visionRadius || 4}
-  `;
-
-  const dp = document.getElementById('dronePanel');
-  const batPct = (state.drone.battery / state.drone.maxBattery) * 100;
-  const batColor = state.drone.battery > 25 ? '#33aaff' : '#ff8800';
-  dp.innerHTML = `
-    <b>DRONE</b> Bat: <span class="bar-bg"><span class="bar-fill" style="width:${batPct}%;background:${batColor}"></span></span> ${state.drone.battery}%
-    &nbsp; Hacks: ${state.drone.hacks} | Cost: ${state.drone.hackCost}<br>
-    ${state.drone.charging ? '<span style="color:#00ffff">CHARGING</span>' : state.drone.battery <= 0 ? '<span style="color:#ff3333">NO POWER</span>' : 'Online'}
-    &nbsp; Guards: ${state.guards.filter(g => g.frozen).length} frozen | Cams: ${state.cameras.filter(c => c.active).length}
-  `;
-
-  const cp = document.getElementById('centerPanel');
+  // Shared UI values
   const elapsed = Math.floor(state.timer / 1000);
   const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
   const secs = String(elapsed % 60).padStart(2, '0');
-  cp.innerHTML = `
-    <b>LEVEL ${state.level}/${state.maxLevels || 5}</b> &nbsp; <span class="role-badge ${myRole}">${myRole ? myRole.toUpperCase() : ''}</span><br>
-    Time: ${mins}:${secs} | Score: ${state.score} | Bank: ${state.totalScore || 0}<br>
-    ${state.alarmActive ? `<span style="color:#ff3333">ALARM: ${Math.ceil(state.alarmTimer/1000)}s</span>` : state.exitOpen ? '<span style="color:#33ff33">EXIT OPEN</span>' : `Loot: ${state.primaryLootCollected}/${state.primaryLootTotal}`}
-  `;
+  const hpPct = (state.thief.hp / state.thief.maxHp) * 100;
+  const hpColor = state.thief.hp > 1 ? '#33ff33' : '#ff3333';
+  const batPct = (state.drone.battery / state.drone.maxBattery) * 100;
+  const batColor = state.drone.battery > 25 ? '#33aaff' : '#ff8800';
+  const alarmInfo = state.alarmActive ? `<span style="color:#ff3333">ALARM: ${Math.ceil(state.alarmTimer/1000)}s</span>` : state.exitOpen ? '<span style="color:#33ff33">EXIT OPEN</span>' : `Loot: ${state.primaryLootCollected}/${state.primaryLootTotal}`;
+  const levelInfo = `<b>LVL ${state.level}/${state.maxLevels || 5}</b> ${mins}:${secs} | Score: ${state.score}`;
+
+  const tp = document.getElementById('thiefPanel');
+  const dp = document.getElementById('dronePanel');
+  const cp = document.getElementById('centerPanel');
+
+  if (isLocalCoop) {
+    // Local co-op: show all 3 panels
+    tp.innerHTML = `
+      <b>THIEF</b> HP: <span class="bar-bg"><span class="bar-fill" style="width:${hpPct}%;background:${hpColor}"></span></span> ${state.thief.hp}/${state.thief.maxHp}
+      &nbsp; Loot: ${state.primaryLootCollected}/${state.primaryLootTotal} | +${state.bonusLootCollected} bonus<br>
+      ${state.thief.picking ? `Picking: ${Math.ceil(state.thief.pickTimer/1000)}s` : state.thief.spotted ? '<span style="color:#ff3333">!! SPOTTED !!</span>' : state.thief.sprinting ? '<span style="color:#ffff00">SPRINTING</span>' : 'Ready'}
+      &nbsp; Vision: ${state.thief.visionRadius || 4}
+    `;
+    dp.innerHTML = `
+      <b>DRONE</b> Bat: <span class="bar-bg"><span class="bar-fill" style="width:${batPct}%;background:${batColor}"></span></span> ${state.drone.battery}%
+      &nbsp; Hacks: ${state.drone.hacks} | Cost: ${state.drone.hackCost}<br>
+      ${state.drone.charging ? '<span style="color:#00ffff">CHARGING</span>' : state.drone.battery <= 0 ? '<span style="color:#ff3333">NO POWER</span>' : 'Online'}
+      &nbsp; Guards: ${state.guards.filter(g => g.frozen).length} frozen | Cams: ${state.cameras.filter(c => c.active).length}
+    `;
+    cp.innerHTML = `
+      ${levelInfo} | Bank: ${state.totalScore || 0}<br>
+      ${alarmInfo}
+    `;
+  } else if (myRole === 'thief') {
+    // Online thief: expanded thief panel with game info, no drone panel
+    tp.innerHTML = `
+      <b>THIEF</b> HP: <span class="bar-bg"><span class="bar-fill" style="width:${hpPct}%;background:${hpColor}"></span></span> ${state.thief.hp}/${state.thief.maxHp}
+      &nbsp; Loot: ${state.primaryLootCollected}/${state.primaryLootTotal} | +${state.bonusLootCollected} bonus<br>
+      ${state.thief.picking ? `Picking: ${Math.ceil(state.thief.pickTimer/1000)}s` : state.thief.spotted ? '<span style="color:#ff3333">!! SPOTTED !!</span>' : state.thief.sprinting ? '<span style="color:#ffff00">SPRINTING</span>' : 'Ready'}
+      &nbsp; Vision: ${state.thief.visionRadius || 4}
+    `;
+    cp.innerHTML = `
+      ${levelInfo} | Bank: ${state.totalScore || 0}<br>
+      ${alarmInfo}
+    `;
+  } else if (myRole === 'drone') {
+    // Online drone: expanded drone panel with game info, no thief panel
+    dp.innerHTML = `
+      <b>DRONE</b> Bat: <span class="bar-bg"><span class="bar-fill" style="width:${batPct}%;background:${batColor}"></span></span> ${state.drone.battery}%
+      &nbsp; Hacks: ${state.drone.hacks} | Cost: ${state.drone.hackCost}<br>
+      ${state.drone.charging ? '<span style="color:#00ffff">CHARGING</span>' : state.drone.battery <= 0 ? '<span style="color:#ff3333">NO POWER</span>' : 'Online'}
+      &nbsp; Guards: ${state.guards.filter(g => g.frozen).length} frozen | Cams: ${state.cameras.filter(c => c.active).length}
+    `;
+    cp.innerHTML = `
+      ${levelInfo} | Bank: ${state.totalScore || 0}<br>
+      Thief HP: ${state.thief.hp}/${state.thief.maxHp} | ${alarmInfo}
+    `;
+  }
 
   // Abilities bar
   const ab = document.getElementById('abilitiesBar');
-  if (myRole === 'thief') {
+  if (myRole === 'thief' || isLocalCoop) {
     const sprintReady = !state.thief.sprinting && state.thief.sprintCooldown <= 0;
     const sprintCD = state.thief.sprintCooldown > 0 ? Math.ceil(state.thief.sprintCooldown / 1000) + 's' : '';
-    ab.innerHTML = `
+    let abHtml = `
       <span class="ability"><span class="key">[Shift]</span> Sprint: ${state.thief.sprinting ? '<span style="color:#ffff00">ACTIVE</span>' : sprintReady ? '<span class="ready">Ready</span>' : `<span class="cooldown">${sprintCD}</span>`}</span>
       <span class="ability"><span class="key">[Q]</span> Noise: <span class="${state.thief.noiseCharges > 0 ? 'charges' : 'empty'}">${state.thief.noiseCharges}</span></span>
       <span class="ability"><span class="key">[F]</span> Smoke: <span class="${state.thief.smokeCharges > 0 ? 'charges' : 'empty'}">${state.thief.smokeCharges}</span></span>
       <span class="ability"><span class="key">[E]</span> Pick Lock</span>
     `;
+    if (isLocalCoop) {
+      abHtml += `
+        &nbsp;|&nbsp;
+        <span class="ability" style="color:#33aaff"><span class="key">[Space]</span> Hack (${state.drone.hackCost}%)</span>
+        <span class="ability" style="color:#33aaff"><span class="key">[R]</span> EMP: <span class="${state.drone.empCharges > 0 ? 'charges' : 'empty'}">${state.drone.empCharges}</span></span>
+        <span class="ability" style="color:#33aaff"><span class="key">[T]</span> Decoy: <span class="${state.drone.decoyCharges > 0 ? 'charges' : 'empty'}">${state.drone.decoyCharges}</span></span>
+        <span class="ability" style="color:#33aaff"><span class="key">[P]</span> Ping</span>
+      `;
+    }
+    ab.innerHTML = abHtml;
   } else if (myRole === 'drone') {
     ab.innerHTML = `
       <span class="ability"><span class="key">[Space]</span> Hack (${state.drone.hackCost}%)</span>
@@ -1678,6 +1716,14 @@ function showGame() {
   gameVisible = true;
   Ambient.start();
   MenuMusic.stop();
+
+  // Online mode: only show the relevant role panel
+  if (!isLocalCoop && myRole === 'thief') {
+    document.getElementById('dronePanel').style.display = 'none';
+  } else if (!isLocalCoop && myRole === 'drone') {
+    document.getElementById('thiefPanel').style.display = 'none';
+  }
+
   resizeCanvas();
   setupTouchControls();
 }
@@ -1706,6 +1752,10 @@ document.getElementById('btnJoin').addEventListener('click', () => {
 
 document.getElementById('codeInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') document.getElementById('btnJoin').click();
+});
+
+document.getElementById('btnLocal').addEventListener('click', () => {
+  connect(() => { send({ type: 'hostLocal' }); });
 });
 
 // ============================================================
